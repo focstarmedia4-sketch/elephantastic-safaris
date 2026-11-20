@@ -1,0 +1,603 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { UserRole } from '../types';
+import { LegalModal } from '../components/LegalModal';
+import { supabase } from '../supabaseClient';
+import {
+  Compass,
+  Briefcase,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  AlertCircle,
+  UserCheck,
+  CheckCircle2,
+  Sparkles,
+  Check,
+} from 'lucide-react';
+
+const SIGNUP_SUCCESS_MESSAGE =
+  'Your account has been created. Please check your email and verify your address before logging in.';
+
+export const AuthPage: React.FC = () => {
+  const { loginUser, setActiveTab, tabParam } = useApp();
+
+  const initialParams = new URLSearchParams(window.location.search);
+  const initialSignupSuccess = initialParams.get('signup') === 'success';
+  const initialPrefillEmail = initialParams.get('email') || '';
+
+  // First time visitor is prompted to register; returning users who have an account can sign in with email & password
+  const [authMode, setAuthMode] = useState<'register' | 'signin'>(() => {
+    if (initialSignupSuccess) return 'signin';
+    if (tabParam === 'traveler' || tabParam === 'operator' || tabParam === 'register') return 'register';
+    if (tabParam === 'signin') return 'signin';
+    const hasAccount = localStorage.getItem('elephantastic_has_registered');
+    return hasAccount ? 'signin' : 'register';
+  });
+
+  const [role, setRole] = useState<UserRole>(tabParam === 'operator' ? 'operator' : 'traveler');
+  const [email, setEmail] = useState(initialPrefillEmail);
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [name, setName] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(
+    initialSignupSuccess ? SIGNUP_SUCCESS_MESSAGE : null
+  );
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('signup') === 'success') {
+      const prefillEmail = params.get('email');
+      setAuthMode('signin');
+      if (prefillEmail) {
+        setEmail(prefillEmail);
+      }
+      setSuccessMessage(SIGNUP_SUCCESS_MESSAGE);
+      return;
+    }
+
+    if (tabParam === 'operator') {
+      setRole('operator');
+      setAuthMode('register');
+    } else if (tabParam === 'traveler') {
+      setRole('traveler');
+      setAuthMode('register');
+    } else if (tabParam === 'signin') {
+      setAuthMode('signin');
+    } else if (tabParam === 'register') {
+      setAuthMode('register');
+    }
+  }, [tabParam]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setAuthError(null);
+    setSuccessMessage(null);
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setError('Please enter your email address.');
+      return;
+    }
+
+    if (!password) {
+      setError('Please enter your password.');
+      return;
+    }
+
+    if (authMode === 'register') {
+      if (!name.trim()) {
+        setError('Please enter your full name or company representative name.');
+        return;
+      }
+      if (password.length < 6) {
+        setError('Password must be at least 6 characters long.');
+        return;
+      }
+      if (confirmPassword && password !== confirmPassword) {
+        setError('Passwords do not match. Please re-enter your password.');
+        return;
+      }
+      if (!acceptedTerms) {
+        setError('Please accept the Terms of Use to create an account.');
+        return;
+      }
+
+      setIsSubmitting(true);
+      try {
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email: trimmedEmail,
+          password,
+        });
+
+        if (signUpError) {
+          setAuthError(signUpError.message);
+          return;
+        }
+
+        // Do not auto-login after signup; redirect to Sign In with pre-filled email
+        if (data.session) {
+          await supabase.auth.signOut();
+        }
+
+        const loginUrl = `/login?signup=success&email=${encodeURIComponent(trimmedEmail)}`;
+        window.history.pushState(null, '', loginUrl);
+        setAuthMode('signin');
+        setEmail(trimmedEmail);
+        setPassword('');
+        setConfirmPassword('');
+        setSuccessMessage(SIGNUP_SUCCESS_MESSAGE);
+        setActiveTab('login', 'signin');
+      } catch (err) {
+        setAuthError(err instanceof Error ? err.message : 'Sign up failed. Please try again.');
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else {
+      // Sign-in mode: ONLY prompted for email and password
+      setIsSubmitting(true);
+      try {
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email: trimmedEmail,
+          password,
+        });
+
+        if (signInError) {
+          setAuthError(signInError.message);
+          return;
+        }
+
+        if (!data.session) {
+          setAuthError('Check your email and confirm your account before logging in.');
+          return;
+        }
+
+        localStorage.setItem('elephantastic_has_registered', 'true');
+        const derivedName =
+          (data.user?.user_metadata?.name as string | undefined) ||
+          trimmedEmail.split('@')[0] ||
+          'Traveler';
+        loginUser(trimmedEmail, role, derivedName, 'United Kingdom', password);
+        if (window.location.pathname !== '/') {
+          window.history.pushState(null, '', '/');
+        }
+        setActiveTab('home');
+      } catch (err) {
+        setAuthError(err instanceof Error ? err.message : 'Sign in failed. Please try again.');
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+  };
+
+  const handleQuickDemo = (demoRole: UserRole) => {
+    if (demoRole === 'traveler') {
+      loginUser('sarah.jenkins@oxfordtravel.co.uk', 'traveler', 'Sarah Jenkins', 'United Kingdom', 'safari123');
+    } else if (demoRole === 'operator') {
+      loginUser('jackson@marawildexpeditions.co.ke', 'operator', 'Jackson Ole Kaelo', 'Kenya', 'safari123');
+    } else {
+      loginUser('njeri@elephantasticsafaris.co.ke', 'admin', 'Njeri Njuguna', 'Kenya', 'safari123');
+    }
+  };
+
+  return (
+    <div className="max-w-md mx-auto px-4 py-12 sm:py-16 space-y-6">
+      {/* Brand Header */}
+      <div className="text-center space-y-2">
+        <span className="text-xs font-semibold text-desert-atlas-dark uppercase tracking-wider block">
+          Elephantastic Safaris
+        </span>
+        <h1 className="text-2xl sm:text-3xl font-bold text-safari-dusk tracking-tight font-display">
+          {authMode === 'register' ? 'Create your Account' : 'Welcome Back'}
+        </h1>
+        <p className="text-xs sm:text-sm text-mountain-hostel/80 max-w-sm mx-auto">
+          {authMode === 'register'
+            ? 'First-time registration: Sign up with your email and password to start posting requests or bidding.'
+            : 'Sign in with your registered email and password to access your dashboard.'}
+        </p>
+      </div>
+
+      {/* Mode Switcher Tabs (Register vs Sign In) */}
+      <div className="grid grid-cols-2 gap-1.5 p-1 bg-stone-200/80 rounded-xl">
+        <button
+          type="button"
+          onClick={() => {
+            setAuthMode('register');
+            setError(null);
+            setAuthError(null);
+            setSuccessMessage(null);
+            if (window.location.search) {
+              window.history.replaceState(null, '', '/login');
+            }
+          }}
+          className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer ${
+            authMode === 'register'
+              ? 'bg-white text-safari-dusk shadow-xs'
+              : 'text-stone-600 hover:text-safari-dusk'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5 text-highlight-accent" />
+          Register (New Account)
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setAuthMode('signin');
+            setError(null);
+            setAuthError(null);
+            setSuccessMessage(null);
+            if (window.location.search) {
+              window.history.replaceState(null, '', '/login');
+            }
+          }}
+          className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer ${
+            authMode === 'signin'
+              ? 'bg-white text-safari-dusk shadow-xs'
+              : 'text-stone-600 hover:text-safari-dusk'
+          }`}
+        >
+          <UserCheck className="w-3.5 h-3.5 text-[#1E5B43]" />
+          Sign In (Existing)
+        </button>
+      </div>
+
+      {/* Success notification banner above the form */}
+      {successMessage && (
+        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0 text-[#1E5B43]" />
+          <span>{successMessage}</span>
+        </div>
+      )}
+
+      {/* Main Authentication Form */}
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-2xl border border-desert-atlas/30 p-6 sm:p-8 space-y-4 shadow-xs"
+      >
+        {/* Error notification banner */}
+        {error && (
+          <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <span>{error}</span>
+              {authMode === 'signin' && error.includes('No registered account') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('register');
+                    setError(null);
+                  }}
+                  className="block mt-1 font-bold underline text-red-800"
+                >
+                  Click here to register with this email
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Intent Prompt Banner */}
+        {tabParam === 'traveler' && (
+          <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-safari-dusk flex items-start gap-2.5">
+            <Compass className="w-5 h-5 text-[#1E5B43] shrink-0 mt-0.5" />
+            <div className="text-xs leading-relaxed">
+              <strong className="text-[#1E5B43] block">Registration Required to Post a Request:</strong>
+              Please register or sign in with your email and password first to publish your custom Kenya trip request for free and receive private bids.
+            </div>
+          </div>
+        )}
+
+        {tabParam === 'operator' && (
+          <div className="p-3.5 rounded-xl bg-desert-atlas-light/80 border border-desert-atlas text-safari-dusk flex items-start gap-2.5">
+            <Briefcase className="w-5 h-5 text-mountain-hostel shrink-0 mt-0.5" />
+            <div className="text-xs leading-relaxed">
+              <strong className="text-mountain-hostel block">Licensed Operator Sign Up Required:</strong>
+              Please register or sign in with your email and password first to access open traveler listings, purchase 24-hour passes, and submit bids.
+            </div>
+          </div>
+        )}
+
+        {/* REGISTRATION SPECIFIC FIELDS */}
+        {authMode === 'register' && (
+          <>
+            {/* Role Picker (Traveler vs Operator) */}
+            <div>
+              <label className="block text-xs font-semibold text-safari-dusk mb-1.5">
+                1. Select Account Type *
+              </label>
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setRole('traveler')}
+                  className={`p-3 rounded-xl border text-left flex flex-col items-start gap-1 transition-all min-h-[44px] cursor-pointer ${
+                    role === 'traveler'
+                      ? 'border-highlight-accent bg-desert-atlas-light/60 text-safari-dusk ring-1 ring-highlight-accent/30'
+                      : 'border-stone-200 bg-white text-stone-600 hover:border-desert-atlas'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-bold text-xs">
+                    <Compass className="w-4 h-4 text-highlight-accent" />
+                    <span>Traveler</span>
+                  </div>
+                  <span className="text-[11px] text-mountain-hostel/70">
+                    Post requests for free &amp; receive private bids.
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setRole('operator')}
+                  className={`p-3 rounded-xl border text-left flex flex-col items-start gap-1 transition-all min-h-[44px] cursor-pointer ${
+                    role === 'operator'
+                      ? 'border-highlight-accent bg-desert-atlas-light/60 text-safari-dusk ring-1 ring-highlight-accent/30'
+                      : 'border-stone-200 bg-white text-stone-600 hover:border-desert-atlas'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-bold text-xs">
+                    <Briefcase className="w-4 h-4 text-mountain-hostel" />
+                    <span>Operator</span>
+                  </div>
+                  <span className="text-[11px] text-mountain-hostel/70">
+                    Licensed Kenyan safari, hotel or BnB provider.
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Full Name / Representative */}
+            <div>
+              <label className="block text-xs font-semibold text-safari-dusk mb-1">
+                2. Full Name or Representative *
+              </label>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={role === 'traveler' ? 'e.g. Sarah Jenkins' : 'e.g. Jackson Ole Kaelo'}
+                className="w-full text-sm rounded-xl border border-stone-300 px-3.5 py-2.5 bg-white text-stone-900 focus:outline-none focus:ring-2 focus:ring-highlight-accent/20 focus:border-highlight-accent min-h-[44px]"
+              />
+            </div>
+          </>
+        )}
+
+        {/* EMAIL ADDRESS (BOTH MODES) */}
+        <div>
+          <label className="block text-xs font-semibold text-safari-dusk mb-1">
+            {authMode === 'register' ? '3. Email Address *' : 'Email Address *'}
+          </label>
+          <div className="relative">
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@domain.com"
+              className="w-full text-sm rounded-xl border border-stone-300 pl-10 pr-3.5 py-2.5 bg-white text-stone-900 focus:outline-none focus:ring-2 focus:ring-highlight-accent/20 focus:border-highlight-accent min-h-[44px]"
+            />
+            <Mail className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+        </div>
+
+        {/* PASSWORD (BOTH MODES) */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs font-semibold text-safari-dusk">
+              {authMode === 'register' ? '4. Password (minimum 6 characters) *' : 'Password *'}
+            </label>
+            {authMode === 'signin' && (
+              <span className="text-[11px] text-stone-500">
+                Default demo pass: <code className="bg-stone-100 px-1 py-0.5 rounded text-stone-700">safari123</code>
+              </span>
+            )}
+          </div>
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full text-sm rounded-xl border border-stone-300 pl-10 pr-10 py-2.5 bg-white text-stone-900 focus:outline-none focus:ring-2 focus:ring-highlight-accent/20 focus:border-highlight-accent min-h-[44px]"
+            />
+            <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1"
+            >
+              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        {/* CONFIRM PASSWORD (REGISTER ONLY) */}
+        {authMode === 'register' && (
+          <div>
+            <label className="block text-xs font-semibold text-safari-dusk mb-1">
+              5. Confirm Password *
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full text-sm rounded-xl border border-stone-300 pl-10 pr-3.5 py-2.5 bg-white text-stone-900 focus:outline-none focus:ring-2 focus:ring-highlight-accent/20 focus:border-highlight-accent min-h-[44px]"
+              />
+              <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+          </div>
+        )}
+
+
+
+        {/* TERMS OF USE ACCEPTANCE (REGISTER ONLY) */}
+        {authMode === 'register' && (
+          <div
+            className={`rounded-xl border p-3.5 transition-colors ${
+              acceptedTerms
+                ? 'border-[#1E5B43]/40 bg-emerald-50/50'
+                : 'border-desert-atlas/40 bg-[#FAF8F5]'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={acceptedTerms}
+                aria-label="Accept Terms of Use"
+                onClick={() => {
+                  setAcceptedTerms((prev) => !prev);
+                  if (error === 'Please accept the Terms of Use to create an account.') {
+                    setError(null);
+                  }
+                }}
+                className="min-h-[44px] min-w-[44px] -m-2 flex items-center justify-center shrink-0 cursor-pointer"
+              >
+                <span
+                  className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
+                    acceptedTerms
+                      ? 'bg-[#1E5B43] border-[#1E5B43] text-white'
+                      : 'bg-white border-stone-400 text-transparent hover:border-safari-dusk'
+                  }`}
+                >
+                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                </span>
+              </button>
+              <div className="text-xs text-mountain-hostel leading-relaxed pt-0.5">
+                <span>I accept the </span>
+                <button
+                  type="button"
+                  onClick={() => setShowTermsModal(true)}
+                  className="font-bold text-[#1E5B43] underline underline-offset-2 hover:text-[#154331] cursor-pointer"
+                >
+                  Terms of Use
+                </button>
+                <span> of Elephantastic Safaris.</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SUBMIT BUTTON */}
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="w-full py-3 px-4 text-xs font-bold text-white bg-highlight-accent hover:bg-highlight-accent-hover rounded-xl transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer min-h-[44px] mt-2"
+        >
+          {authMode === 'register' ? (
+            <>
+              Register &amp; Continue as {role === 'traveler' ? 'Traveler' : 'Operator'}
+              <ArrowRight className="w-4 h-4" />
+            </>
+          ) : (
+            <>
+              Sign In to Account
+              <ArrowRight className="w-4 h-4" />
+            </>
+          )}
+        </button>
+
+        {/* BOTTOM TOGGLE HELPER */}
+        <div className="pt-2 text-center text-xs text-stone-600">
+          {authMode === 'register' ? (
+            <p>
+              Already registered?{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('signin');
+                  setError(null);
+                  setAuthError(null);
+                  setSuccessMessage(null);
+                  if (window.location.search) {
+                    window.history.replaceState(null, '', '/login');
+                  }
+                }}
+                className="font-bold text-highlight-accent hover:underline cursor-pointer"
+              >
+                Sign in with email and password
+              </button>
+            </p>
+          ) : (
+            <p>
+              Don't have an account yet?{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('register');
+                  setError(null);
+                  setAuthError(null);
+                  setSuccessMessage(null);
+                  if (window.location.search) {
+                    window.history.replaceState(null, '', '/login');
+                  }
+                }}
+                className="font-bold text-highlight-accent hover:underline cursor-pointer"
+              >
+                Register a new account here
+              </button>
+            </p>
+          )}
+        </div>
+      </form>
+
+      {authError && (
+        <p className="text-xs text-red-600 text-center -mt-3" role="alert">
+          {authError}
+        </p>
+      )}
+
+      {/* Quick Demo Pre-sets for reviewer convenience */}
+      <div className="pt-2 border-t border-stone-200 space-y-2">
+        <div className="text-center text-xs text-stone-500 font-medium uppercase tracking-wider">
+          One-Click Demo Personas
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            onClick={() => handleQuickDemo('traveler')}
+            className="p-2.5 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-xs font-medium text-stone-800 text-center transition-colors min-h-[44px] cursor-pointer"
+          >
+            Traveler (UK)
+          </button>
+          <button
+            onClick={() => handleQuickDemo('operator')}
+            className="p-2.5 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-xs font-medium text-stone-800 text-center transition-colors min-h-[44px] cursor-pointer"
+          >
+            Operator (Kenya)
+          </button>
+          <button
+            onClick={() => handleQuickDemo('admin')}
+            className="p-2.5 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-xs font-medium text-stone-800 text-center transition-colors min-h-[44px] cursor-pointer"
+          >
+            Admin (Njeri)
+          </button>
+        </div>
+      </div>
+
+      <LegalModal
+        isOpen={showTermsModal}
+        onClose={() => setShowTermsModal(false)}
+        initialTab="terms"
+        onAccept={() => {
+          setAcceptedTerms(true);
+          if (error === 'Please accept the Terms of Use to create an account.') {
+            setError(null);
+          }
+        }}
+      />
+    </div>
+  );
+};

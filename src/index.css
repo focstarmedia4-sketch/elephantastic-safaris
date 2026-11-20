@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-body: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+
+  --color-primary-green: #1E5B43;
+  --color-primary-green-hover: #164634;
+  --color-primary-green-light: #EBF3EF;
+  --color-primary-green-dark: #123829;
+
+  --color-warm-bg: #F6F4EE;
+  --color-card-border: #E2DED3;
+
+  /* Safari Dusk & Earth Tones */
+  --color-safari-dusk: #1E5B43;
+  --color-safari-dusk-dark: #123829;
+  --color-safari-dusk-light: #2A7356;
+  --color-safari-dusk-hover: #164634;
+
+  --color-desert-atlas: #CDAA7D;
+  --color-desert-atlas-light: #F9F4EC;
+  --color-desert-atlas-dark: #9F7A4D;
+  --color-desert-atlas-muted: #E4D4BE;
+
+  --color-mountain-hostel: #22332B;
+  --color-mountain-hostel-dark: #15221B;
+  --color-mountain-hostel-light: #3D5749;
+  --color-mountain-hostel-hover: #1C2B23;
+
+  --color-highlight-accent: #D96A27;
+  --color-highlight-accent-hover: #B85317;
+  --color-highlight-accent-light: #FDF3EC;
+  --color-highlight-accent-muted: #F0A575;
+}
+
+@layer base {
+  html,
+  body,
+  button,
+  input,
+  select,
+  textarea {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    font-synthesis: none;
+  }
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  font-weight: 400;
+  background-color: #F6F4EE;
+  color: #22332B;
+}
+
+h1, h2, h3, h4, h5, h6, .font-heading, .font-display {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+}
+
+.font-body, .font-mono, .font-sans, .font-serif {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+}
+
+

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Elephantastic Safaris</title>
+    <script>
+      // In AI Studio preview environment, HMR WebSockets are disabled.
+      // Suppress unhandled WebSocket rejections from @vite/client.
+      (function() {
+        window.addEventListener('unhandledrejection', function(e) {
+          if (e.reason && (
+            (typeof e.reason.message === 'string' && e.reason.message.includes('WebSocket')) ||
+            (typeof e.reason === 'string' && e.reason.includes('WebSocket')) ||
+            (typeof e.reason.stack === 'string' && e.reason.stack.includes('@vite/client'))
+          )) {
+            e.preventDefault();
+          }
+        });
+        window.addEventListener('error', function(e) {
+          if (
+            (typeof e.message === 'string' && e.message.includes('WebSocket')) ||
+            (typeof e.filename === 'string' && e.filename.includes('@vite/client'))
+          ) {
+            e.preventDefault();
+          }
+        });
+        if (typeof window !== 'undefined' && window.WebSocket) {
+          const NativeWebSocket = window.WebSocket;
+          window.WebSocket = function(url, protocols) {
+            if (protocols === 'vite-hmr' || (Array.isArray(protocols) && protocols.includes('vite-hmr'))) {
+              const target = new EventTarget();
+              target.readyState = 1;
+              target.send = function() {};
+              target.close = function() {};
+              return target;
+            }
+            return new NativeWebSocket(url, protocols);
+          };
+          window.WebSocket.prototype = NativeWebSocket.prototype;
+          window.WebSocket.CONNECTING = NativeWebSocket.CONNECTING;
+          window.WebSocket.OPEN = NativeWebSocket.OPEN;
+          window.WebSocket.CLOSING = NativeWebSocket.CLOSING;
+          window.WebSocket.CLOSED = NativeWebSocket.CLOSED;
+        }
+      })();
+    </script>
+    <meta name="description" content="Elephantastic Safaris: Kenya reverse travel marketplace connecting travelers with verified safari, hotel, and BnB operators through bidding and contact unlocks." />
+    <meta property="og:title" content="Elephantastic Safaris" />
+    <meta property="og:description" content="Elephantastic Safaris: Kenya reverse travel marketplace connecting travelers with verified safari, hotel, and BnB operators through bidding and contact unlocks." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;700&display=swap" rel="stylesheet">
+  </head>
+  <body class="bg-[#FAF8F5] text-[#2F4858] antialiased selection:bg-[#CDAA7D]/30 selection:text-[#3A2E39] min-h-screen">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

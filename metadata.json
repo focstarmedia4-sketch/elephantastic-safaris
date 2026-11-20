@@ -1,0 +1,6 @@
+{
+  "name": "Safari & Stays",
+  "description": "Kenya reverse travel marketplace connecting travelers with verified safari, hotel, and BnB operators through bidding and contact unlocks.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

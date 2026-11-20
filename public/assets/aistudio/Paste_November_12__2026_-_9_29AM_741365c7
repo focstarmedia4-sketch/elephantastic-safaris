@@ -1,0 +1,805 @@
+ Pre-warming completed.
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx
+  6:28:00 AM [vite] (client) Pre-transform error: Transform failed with 1 error:
+  
+  [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m
+       [38;5;246m│[0m
+   [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here
+   [38;5;240m    │[0m 
+   [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+   [38;5;240m    │[0m         ─────┬────  
+   [38;5;240m    │[0m              ╰────── It can not be redeclared here
+  [38;5;246m─────╯[0m
+  
+    Plugin: vite:oxc
+    File: /app/applet/src/context/AppContext.tsx 
+09:28:01.540
+Backend
+Log
+ CONNECTED 
+09:28:01.736
+Backend
+Log
+ 6:28:01 AM [vite] (client) dependencies optimized: lucide-react, react-dom/client 
+09:28:01.737
+Backend
+Log
+ 6:28:01 AM [vite] (client) optimized dependencies changed. reloading 
+09:28:02.385
+Backend
+Error
+ 6:28:02 AM [vite] (client) Pre-transform error: Transform failed with 1 error: 
+09:28:02.385
+Backend
+Error
+ [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared 
+09:28:02.385
+Backend
+Log
+ [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m 
+09:28:02.385
+Backend
+Log
+ [38;5;246m│[0m 
+09:28:02.385
+Backend
+Log
+ [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m 
+09:28:02.385
+Backend
+Log
+ [38;5;240m    │[0m         ─────┬──── 
+09:28:02.385
+Backend
+Log
+ [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here 
+09:28:02.385
+Backend
+Log
+ [38;5;240m    │[0m 
+09:28:02.385
+Backend
+Log
+ [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m 
+09:28:02.385
+Backend
+Log
+ [38;5;240m    │[0m         ─────┬──── 
+09:28:02.385
+Backend
+Error
+ 6:28:02 AM [vite] (client) Pre-transform error: Transform failed with 1 error: 
+09:28:02.385
+Backend
+Error
+ [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared 
+09:28:02.386
+Backend
+Log
+ [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m 
+09:28:02.386
+Backend
+Log
+ [38;5;246m│[0m 
+09:28:02.386
+Backend
+Log
+ [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m 
+09:28:02.386
+Backend
+Log
+ [38;5;240m    │[0m         ─────┬──── 
+09:28:02.386
+Backend
+Log
+ [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here 
+09:28:02.386
+Backend
+Log
+ [38;5;240m    │[0m 
+09:28:02.439
+Backend
+Log
+ [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m 
+09:28:02.439
+Backend
+Log
+ [38;5;240m    │[0m         ─────┬──── 
+09:28:02.439
+Backend
+Error
+ 6:28:02 AM [vite] (client) Pre-transform error: Transform failed with 1 error: 
+09:28:02.439
+Backend
+Error
+ [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared 
+09:28:02.439
+Backend
+Log
+ [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m 
+09:28:02.439
+Backend
+Log
+ [38;5;246m│[0m 
+09:28:02.439
+Backend
+Log
+ [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m 
+09:28:02.439
+Backend
+Log
+ [38;5;240m    │[0m         ─────┬──── 
+09:28:02.439
+Backend
+Log
+ [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here 
+09:28:02.439
+Backend
+Log
+ [38;5;240m    │[0m 
+09:28:02.439
+Backend
+Log
+ [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m 
+09:28:02.439
+Backend
+Log
+ [38;5;240m    │[0m         ─────┬──── 
+09:28:02.439
+Backend
+Error
+ 6:28:02 AM [vite] (client) Pre-transform error: Transform failed with 1 error: 
+09:28:02.439
+Backend
+Error
+ [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared 
+09:28:02.440
+Backend
+Log
+ [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m 
+09:28:02.440
+Backend
+Log
+ [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m 
+09:28:02.440
+Backend
+Log
+ [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m         ─────┬──── 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m              ╰────── It can not be redeclared here 
+09:28:02.440
+Backend
+Log
+ [38;5;246m─────╯[0m 
+09:28:02.440
+Backend
+Log
+ Plugin: vite:oxc 
+09:28:02.440
+Backend
+Log
+ File: /app/applet/src/context/AppContext.tsx 
+09:28:02.440
+Backend
+Error
+ 6:28:02 AM [vite] (client) Pre-transform error: Transform failed with 1 error: 
+09:28:02.440
+Backend
+Error
+ [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared 
+09:28:02.440
+Backend
+Log
+ [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m 
+09:28:02.440
+Backend
+Log
+ [38;5;246m│[0m 
+09:28:02.440
+Backend
+Log
+ [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m         ─────┬──── 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m 
+09:28:02.440
+Backend
+Log
+ [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m         ─────┬──── 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m              ╰────── It can not be redeclared here 
+09:28:02.440
+Backend
+Log
+ [38;5;246m─────╯[0m 
+09:28:02.440
+Backend
+Log
+ Plugin: vite:oxc 
+09:28:02.440
+Backend
+Log
+ Plugin: vite:oxc 
+09:28:02.440
+Backend
+Error
+ 6:28:02 AM [vite] (client) Pre-transform error: Transform failed with 1 error: 
+09:28:02.440
+Backend
+Error
+ [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared 
+09:28:02.440
+Backend
+Log
+ [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m 
+09:28:02.440
+Backend
+Log
+ [38;5;246m│[0m 
+09:28:02.440
+Backend
+Log
+ [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m         ─────┬──── 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m 
+09:28:02.440
+Backend
+Log
+ [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m         ─────┬──── 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m              ╰────── It can not be redeclared here 
+09:28:02.440
+Backend
+Log
+ [38;5;246m─────╯[0m 
+09:28:02.440
+Backend
+Log
+ Plugin: vite:oxc 
+09:28:02.440
+Backend
+Log
+ File: /app/applet/src/context/AppContext.tsx 
+09:28:02.440
+Backend
+Error
+ 6:28:02 AM [vite] (client) Pre-transform error: Transform failed with 1 error: 
+09:28:02.440
+Backend
+Error
+ [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared 
+09:28:02.440
+Backend
+Log
+ [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m 
+09:28:02.440
+Backend
+Log
+ [38;5;246m│[0m 
+09:28:02.440
+Backend
+Log
+ [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m         ─────┬──── 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m 
+09:28:02.440
+Backend
+Log
+ [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m         ─────┬──── 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m              ╰────── It can not be redeclared here 
+09:28:02.440
+Backend
+Log
+ [38;5;246m─────╯[0m 
+09:28:02.440
+Backend
+Error
+ [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared 
+09:28:02.440
+Backend
+Log
+ [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m 
+09:28:02.440
+Backend
+Log
+ [38;5;246m│[0m 
+09:28:02.440
+Backend
+Log
+ [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m         ─────┬──── 
+09:28:02.440
+Backend
+Log
+ [38;5;240m    │[0m 
+09:28:02.441
+Backend
+Log
+ [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m 
+09:28:02.441
+Backend
+Log
+ [38;5;240m    │[0m         ─────┬──── 
+09:28:02.441
+Backend
+Log
+ [38;5;240m    │[0m              ╰────── It can not be redeclared here 
+09:28:02.441
+Backend
+Log
+ [38;5;246m─────╯[0m 
+09:28:02.441
+Backend
+Log
+ Plugin: vite:oxc 
+09:28:02.441
+Backend
+Log
+ File: /app/applet/src/context/AppContext.tsx 
+09:28:03.614
+Backend
+Error
+ 6:28:03 AM [vite] Internal server error: Transform failed with 1 error: 
+09:28:03.614
+Backend
+Error
+ [31m[PARSE_ERROR] [0mIdentifier `logoutUser` has already been declared 
+09:28:03.614
+Backend
+Log
+ [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/context/AppContext.tsx:291:9 [38;5;246m][0m 
+09:28:03.614
+Backend
+Log
+ [38;5;246m│[0m 
+09:28:03.614
+Backend
+Log
+ [38;5;246m291 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m 
+09:28:03.614
+Backend
+Log
+ [38;5;240m    │[0m         ─────┬──── 
+09:28:03.614
+Backend
+Log
+ [38;5;240m    │[0m              ╰────── `logoutUser` has already been declared here 
+09:28:03.614
+Backend
+Log
+ [38;5;240m    │[0m 
+09:28:03.614
+Backend
+Log
+ [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0mlogoutUser[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m 
+09:28:03.614
+Backend
+Log
+ [38;5;240m    │[0m         ─────┬──── 
+09:28:03.615
+Backend
+Log
+ at transformWithOxc (/app/applet/node_modules/vite/dist/node/chunks/node.js:7673:19) 
+09:28:03.615
+Backend
+Log
+ at TransformPluginContext.transform (/app/applet/node_modules/vite/dist/node/chunks/node.js:7747:26) 
+09:28:03.615
+Backend
+Log
+ at EnvironmentPluginContainer.transform (/app/applet/node_modules/vite/dist/node/chunks/node.js:8636:51) 
+09:28:03.615
+Backend
+Log
+ at async loadAndTransform (/app/applet/node_modules/vite/dist/node/chunks/node.js:20112:26) 
+09:28:03.615
+Backend
+Log
+ at async viteTransformMiddleware (/app/applet/node_modules/vite/dist/node/chunks/node.js:20332:20) 
+09:28:03.904
+System
+Build
+ Render End 
