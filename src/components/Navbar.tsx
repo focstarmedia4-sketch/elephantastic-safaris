@@ -30,14 +30,10 @@ export const Navbar: React.FC = () => {
   const passStatus = currentOperator ? getPassTimeRemaining(currentOperator) : null;
 
   const { travelerBidsCount, travelerFollowUpsCount } = useMemo(() => {
-    if (currentUser && currentUser.role !== 'traveler') {
+    if (!currentUser || currentUser.role !== 'traveler') {
       return { travelerBidsCount: 0, travelerFollowUpsCount: 0 };
     }
-    const myReqs = currentUser
-      ? requests.filter((r) => r.traveler_id === currentUser.id)
-      : requests.filter(
-          (r) => r.traveler_id === 'user_traveler_1' || r.traveler_id.startsWith('traveler_guest')
-        );
+    const myReqs = requests.filter((r) => r.traveler_id === currentUser.id);
     const reqIds = new Set(myReqs.map((r) => r.id));
     const myBids = bids.filter((b) => reqIds.has(b.request_id));
     const followUpCount = myBids.reduce((sum, b) => sum + parseBidMessages(b).followUps.length, 0);
@@ -225,22 +221,24 @@ export const Navbar: React.FC = () => {
               </button>
             ) : (
               <div className="hidden sm:flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setBidsInboxOpen(true)}
-                  className="px-3 py-2 text-xs font-semibold text-stone-100 bg-safari-dusk-dark/80 hover:bg-safari-dusk-dark border border-desert-atlas/40 hover:border-desert-atlas rounded-xl transition-colors whitespace-nowrap shrink-0 min-h-[44px] cursor-pointer flex items-center gap-1.5"
-                  title="View operator bids and follow-up messages"
-                >
-                  <MessageSquare className="w-3.5 h-3.5 text-desert-atlas shrink-0" />
-                  <span className="hidden md:inline">Bids &amp; Follow-Ups</span>
-                  {(travelerBidsCount > 0 || travelerFollowUpsCount > 0) && (
-                    <span className="px-1.5 py-0.5 text-[10px] font-bold font-mono rounded bg-highlight-accent text-white tabular-nums">
-                      {travelerFollowUpsCount > 0
-                        ? `${travelerBidsCount} · ${travelerFollowUpsCount} msg`
-                        : travelerBidsCount}
-                    </span>
-                  )}
-                </button>
+                {currentUser?.role === 'traveler' && (
+                  <button
+                    type="button"
+                    onClick={() => setBidsInboxOpen(true)}
+                    className="px-3 py-2 text-xs font-semibold text-stone-100 bg-safari-dusk-dark/80 hover:bg-safari-dusk-dark border border-desert-atlas/40 hover:border-desert-atlas rounded-xl transition-colors whitespace-nowrap shrink-0 min-h-[44px] cursor-pointer flex items-center gap-1.5"
+                    title="View operator bids and follow-up messages"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5 text-desert-atlas shrink-0" />
+                    <span className="hidden md:inline">Bids &amp; Follow-Ups</span>
+                    {(travelerBidsCount > 0 || travelerFollowUpsCount > 0) && (
+                      <span className="px-1.5 py-0.5 text-[10px] font-bold font-mono rounded bg-highlight-accent text-white tabular-nums">
+                        {travelerFollowUpsCount > 0
+                          ? `${travelerBidsCount} · ${travelerFollowUpsCount} msg`
+                          : travelerBidsCount}
+                      </span>
+                    )}
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     if (!currentUser) {
@@ -294,7 +292,7 @@ export const Navbar: React.FC = () => {
                 <Menu className="w-4 h-4 text-desert-atlas shrink-0" />
               )}
               <span>Menu</span>
-              {(!currentUser || currentUser.role === 'traveler') &&
+              {currentUser?.role === 'traveler' &&
                 (travelerBidsCount > 0 || travelerFollowUpsCount > 0) &&
                 !mobileMenuOpen && (
                   <span className="px-1.5 py-0.5 text-[10px] font-bold font-mono rounded bg-highlight-accent text-white tabular-nums sm:hidden">
@@ -376,21 +374,23 @@ export const Navbar: React.FC = () => {
                     </button>
                   </>
                 )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBidsInboxOpen(true);
-                    setMobileMenuOpen(false);
-                  }}
-                  className="w-full text-left py-2 text-sm text-desert-atlas font-semibold flex items-center justify-between"
-                >
-                  <span>Bids &amp; Follow-Up Messages</span>
-                  {(travelerBidsCount > 0 || travelerFollowUpsCount > 0) && (
-                    <span className="px-2 py-0.5 text-xs font-mono rounded bg-highlight-accent text-white">
-                      {travelerBidsCount} bids · {travelerFollowUpsCount} follow-ups
-                    </span>
-                  )}
-                </button>
+                {currentUser?.role === 'traveler' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBidsInboxOpen(true);
+                      setMobileMenuOpen(false);
+                    }}
+                    className="w-full text-left py-2 text-sm text-desert-atlas font-semibold flex items-center justify-between"
+                  >
+                    <span>Bids &amp; Follow-Up Messages</span>
+                    {(travelerBidsCount > 0 || travelerFollowUpsCount > 0) && (
+                      <span className="px-2 py-0.5 text-xs font-mono rounded bg-highlight-accent text-white">
+                        {travelerBidsCount} bids · {travelerFollowUpsCount} follow-ups
+                      </span>
+                    )}
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     setMobileMenuOpen(false);

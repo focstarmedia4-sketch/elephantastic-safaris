@@ -29,11 +29,10 @@ export const TravelerBidsFollowUpsModal: React.FC<TravelerBidsFollowUpsModalProp
   const [filterMode, setFilterMode] = useState<'all' | 'followups'>('all');
 
   const myRequests = useMemo(() => {
-    return currentUser
-      ? requests.filter((r) => r.traveler_id === currentUser.id)
-      : requests.filter(
-          (r) => r.traveler_id === 'user_traveler_1' || r.traveler_id.startsWith('traveler_guest')
-        );
+    if (!currentUser || currentUser.role !== 'traveler') {
+      return [];
+    }
+    return requests.filter((r) => r.traveler_id === currentUser.id);
   }, [currentUser, requests]);
 
   const enrichedBids = useMemo(() => {
@@ -71,7 +70,7 @@ export const TravelerBidsFollowUpsModal: React.FC<TravelerBidsFollowUpsModalProp
     return enrichedBids;
   }, [enrichedBids, filterMode]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !currentUser || currentUser.role !== 'traveler') return null;
 
   const formatTimestamp = (value: string) => {
     const parsedDate = new Date(value);
