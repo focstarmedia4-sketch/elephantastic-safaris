@@ -6,4 +6,11 @@ const SUPABASE_URL = "https://zzsxyuojnkxfedjecfha.supabase.co";
 // Paste your Supabase Public (Publishable) Key here
 const SUPABASE_PUBLIC_KEY = "sb_publishable_784QIJaTvDeGmE4Kad8wiQ_QDel-TOL";
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY);
+export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, {
+  auth: {
+    detectSessionInUrl: true,
+    persistSession: true,
+    autoRefreshToken: true,
+    flowType: "implicit",
+  },
+});

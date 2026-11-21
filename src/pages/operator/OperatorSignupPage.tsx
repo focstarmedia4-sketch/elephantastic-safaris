@@ -23,6 +23,7 @@ export const OperatorSignupPage: React.FC = () => {
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [googleFallbackUrl, setGoogleFallbackUrl] = useState<string | null>(null);
   const googleInFlightRef = React.useRef(false);
 
   React.useEffect(() => {
@@ -86,13 +87,21 @@ export const OperatorSignupPage: React.FC = () => {
 
     googleInFlightRef.current = true;
     setError(null);
+    setGoogleFallbackUrl(null);
     setIsGoogleLoading(true);
 
-    const { error: oauthError } = await startGoogleOAuth('operator');
-    if (oauthError) {
+    const res = await startGoogleOAuth('operator');
+    if (res.error) {
       googleInFlightRef.current = false;
       setIsGoogleLoading(false);
-      setError(oauthError);
+      setError(res.error);
+      return;
+    }
+
+    if (res.openedInNewTab && res.url) {
+      googleInFlightRef.current = false;
+      setIsGoogleLoading(false);
+      setGoogleFallbackUrl(res.url);
     }
   };
 
@@ -112,52 +121,84 @@ export const OperatorSignupPage: React.FC = () => {
       </div>
 
       <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-desert-atlas/30 p-6 sm:p-8 space-y-6 shadow-xs">
-        {/* Google OAuth Quick Signup */}
-        <div className="space-y-3">
-          <button
-            type="button"
-            onClick={handleGoogleOperatorSignup}
-            disabled={isGoogleLoading}
-            className="w-full py-2.5 px-4 text-xs font-bold text-stone-800 bg-white hover:bg-stone-50 disabled:opacity-70 disabled:cursor-wait border border-stone-300 rounded-xl transition-colors flex items-center justify-center gap-2.5 shadow-xs cursor-pointer min-h-[44px]"
-          >
-            {isGoogleLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 shrink-0 animate-spin text-safari-dusk" />
-                Redirecting to Google...
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-                  <path
-                    fill="#4285F4"
-                    d="M23.745 12.27c0-.79-.07-1.54-.19-2.27h-11.3v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12.255 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96h-3.98v3.09C3.515 21.3 7.565 24 12.255 24z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.525 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62h-3.98a11.86 11.86 0 0 0 0 10.76l3.98-3.09z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12.255 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C18.205 1.19 15.495 0 12.255 0c-4.69 0-8.74 2.7-10.71 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"
-                  />
-                </svg>
-                Continue with Google as Operator
-              </>
-            )}
-          </button>
+        {/* Google OAuth Quick Signup (Operator Only) */}
+        {!currentUser && (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-safari-dusk/30 bg-desert-atlas-light/40 p-4 space-y-2.5">
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="font-bold text-safari-dusk flex items-center gap-1.5">
+                  <Briefcase className="w-3.5 h-3.5 text-mountain-hostel" />
+                  Google Sign-Up Account Type:
+                </span>
+                <span className="px-2 py-0.5 rounded-md bg-safari-dusk text-white text-[10px] font-bold uppercase tracking-wide">
+                  Operator
+                </span>
+              </div>
+              <p className="text-[11px] text-stone-600">
+                Signing in here registers your Google account as a <strong>Kenyan Operator</strong> so you can manage your business profile, bid on requests, and unlock leads.
+              </p>
+              <button
+                type="button"
+                onClick={handleGoogleOperatorSignup}
+                disabled={isGoogleLoading}
+                className="w-full py-2.5 px-4 text-xs font-bold text-stone-800 bg-white hover:bg-stone-50 disabled:opacity-70 disabled:cursor-wait border border-stone-300 rounded-xl transition-colors flex items-center justify-center gap-2.5 shadow-xs cursor-pointer min-h-[44px]"
+              >
+                {isGoogleLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 shrink-0 animate-spin text-safari-dusk" />
+                    Connecting to Google as Operator...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        fill="#4285F4"
+                        d="M23.745 12.27c0-.79-.07-1.54-.19-2.27h-11.3v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12.255 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96h-3.98v3.09C3.515 21.3 7.565 24 12.255 24z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.525 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62h-3.98a11.86 11.86 0 0 0 0 10.76l3.98-3.09z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12.255 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C18.205 1.19 15.495 0 12.255 0c-4.69 0-8.74 2.7-10.71 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"
+                      />
+                    </svg>
+                    Continue with Google as Operator
+                  </>
+                )}
+              </button>
 
-          <div className="relative flex items-center">
-            <div className="flex-grow border-t border-desert-atlas/20" />
-            <span className="mx-3 text-[11px] font-medium text-stone-400 uppercase tracking-wider">
-              or register with business email
-            </span>
-            <div className="flex-grow border-t border-desert-atlas/20" />
+              {googleFallbackUrl && (
+                <div className="p-2.5 rounded-lg bg-white border border-emerald-200 text-[11px] text-stone-700 space-y-1">
+                  <p>
+                    Google sign-in for <strong>Operator</strong> opened in a new tab.
+                  </p>
+                  <a
+                    href={googleFallbackUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-bold text-[#1E5B43] underline hover:text-[#154331]"
+                  >
+                    Didn&apos;t open? Click here to continue to Google &rarr;
+                  </a>
+                </div>
+              )}
+            </div>
+
+            <div className="relative flex items-center">
+              <div className="flex-grow border-t border-desert-atlas/20" />
+              <span className="mx-3 text-[11px] font-medium text-stone-400 uppercase tracking-wider">
+                or register with business email
+              </span>
+              <div className="flex-grow border-t border-desert-atlas/20" />
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Step 1: Business Identification */}
         <div className="space-y-4">

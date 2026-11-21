@@ -387,7 +387,13 @@ export async function loadPublicSupabaseData(): Promise<{
  * Never uses localStorage, sessionStorage, or hardcoded seed rows.
  */
 export async function loadAuthenticatedSupabaseState(
-  authUserId: string
+  authUserId: string,
+  fallbackSessionUser?: {
+    id: string;
+    email?: string;
+    user_metadata?: Record<string, any>;
+    created_at?: string;
+  }
 ): Promise<LoadedSupabaseState> {
   const errors: string[] = [];
 
@@ -402,7 +408,22 @@ export async function loadAuthenticatedSupabaseState(
     errors.push(formatSupabaseError('select profiles', profileRes.error));
   }
 
-  const profile = profileRes.data ? mapProfileRow(profileRes.data) : null;
+  let profile: User | null = profileRes.data ? mapProfileRow(profileRes.data) : null;
+  if (!profile && fallbackSessionUser) {
+    profile = {
+      id: fallbackSessionUser.id,
+      email: fallbackSessionUser.email || '',
+      role: mapDbRoleToUiRole(fallbackSessionUser.user_metadata?.role),
+      name:
+        fallbackSessionUser.user_metadata?.full_name ||
+        fallbackSessionUser.user_metadata?.name ||
+        fallbackSessionUser.email?.split('@')[0] ||
+        'User',
+      country: '',
+      preferred_currency: 'USD',
+      created_at: fallbackSessionUser.created_at || new Date().toISOString(),
+    };
+  }
   const role = profile?.role || 'traveler';
 
   // 2. Load role-appropriate data + shared read-only tables in parallel
@@ -783,6 +804,133 @@ export async function updateProfileInDb(
   }
 
   return { data: mapProfileRow(data), error: null };
+}
+
+/**
+ * Registers / synchronizes the chosen role ('traveller' | 'operator', never 'admin')
+ * for a Google OAuth user in Supabase `auth.users` metadata and `profiles(id, email, full_name, role)`.
+ */
+export async function syncOAuthUserProfileRoleInDb(
+  authUser: {
+    id: string;
+    email?: string;
+    user_metadata?: Record<string, any>;
+    created_at?: string;
+  },
+  requestedDbRole: 'traveller' | 'operator' | null
+): Promise<SupabaseResult<User>> {
+  const safeRole: 'traveller' | 'operator' | null =
+    requestedDbRole === 'operator'
+      ? 'operator'
+      : requestedDbRole === 'traveller'
+        ? 'traveller'
+        : null;
+
+  const fullName =
+    authUser.user_metadata?.full_name ||
+    authUser.user_metadata?.name ||
+    authUser.email?.split('@')[0] ||
+    'User';
+
+  // 1. Read existing profile row (allow brief retry if DB trigger is still committing)
+  let { data: existingProfile, error: selectErr } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, role')
+    .eq('id', authUser.id)
+    .maybeSingle();
+
+  if (!existingProfile && !selectErr) {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const retry = await supabase
+      .from('profiles')
+      .select('id, email, full_name, role')
+      .eq('id', authUser.id)
+      .maybeSingle();
+    existingProfile = retry.data;
+    selectErr = retry.error;
+  }
+
+  if (selectErr) {
+    return { data: null, error: formatSupabaseError('select profiles (OAuth sync)', selectErr) };
+  }
+
+  // 2. If profile row does not exist yet, insert/upsert with chosen role (defaults to traveller)
+  if (!existingProfile) {
+    const roleToSet: 'traveller' | 'operator' = safeRole || 'traveller';
+    await supabase.auth.updateUser({
+      data: { role: roleToSet, full_name: fullName },
+    });
+
+    const { data: inserted, error: insertErr } = await supabase
+      .from('profiles')
+      .upsert(
+        {
+          id: authUser.id,
+          email: authUser.email || '',
+          full_name: fullName,
+          role: roleToSet,
+        },
+        { onConflict: 'id' }
+      )
+      .select('id, email, full_name, role')
+      .single();
+
+    if (insertErr || !inserted) {
+      return {
+        data: null,
+        error: formatSupabaseError('upsert profiles (Google OAuth registration)', insertErr),
+      };
+    }
+
+    return { data: mapProfileRow(inserted), error: null };
+  }
+
+  // 3. Profile row exists: never overwrite admin
+  if (existingProfile.role === 'admin' || !safeRole || existingProfile.role === safeRole) {
+    return { data: mapProfileRow(existingProfile), error: null };
+  }
+
+  // 4. If user explicitly chose 'traveller' but already has an operator_profiles record, preserve 'operator'
+  if (safeRole === 'traveller' && existingProfile.role === 'operator') {
+    const { data: existingOp } = await supabase
+      .from('operator_profiles')
+      .select('user_id')
+      .eq('user_id', authUser.id)
+      .maybeSingle();
+    if (existingOp) {
+      return { data: mapProfileRow(existingProfile), error: null };
+    }
+  }
+
+  // 5. Update auth metadata + profiles.role to match the chosen OAuth role ('operator' or 'traveller')
+  await supabase.auth.updateUser({
+    data: {
+      role: safeRole,
+      full_name: existingProfile.full_name || fullName,
+    },
+  });
+
+  const { data: updated, error: updateErr } = await supabase
+    .from('profiles')
+    .update({
+      role: safeRole,
+      full_name: existingProfile.full_name || fullName,
+    })
+    .eq('id', authUser.id)
+    .select('id, email, full_name, role')
+    .single();
+
+  if (updateErr || !updated) {
+    return {
+      data: mapProfileRow(existingProfile),
+      error: formatSupabaseError(
+        `update profiles.role to '${safeRole}' (Google OAuth)`,
+        updateErr
+      ),
+    };
+  }
+
+  return { data: mapProfileRow(updated), error: null };
 }
 
 /**

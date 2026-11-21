@@ -48,7 +48,8 @@ export const AuthPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [googleLoadingRole, setGoogleLoadingRole] = useState<UserRole | null>(null);
+  const [googleFallback, setGoogleFallback] = useState<{ url: string; role: 'traveller' | 'operator' } | null>(null);
   const googleInFlightRef = React.useRef(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(
     initialSignupSuccess ? SIGNUP_SUCCESS_MESSAGE : null
@@ -57,7 +58,7 @@ export const AuthPage: React.FC = () => {
   React.useEffect(() => {
     const resetGoogleState = () => {
       googleInFlightRef.current = false;
-      setIsGoogleLoading(false);
+      setGoogleLoadingRole(null);
     };
     window.addEventListener('pageshow', resetGoogleState);
     return () => window.removeEventListener('pageshow', resetGoogleState);
@@ -201,17 +202,30 @@ export const AuthPage: React.FC = () => {
     e.stopPropagation();
     if (googleInFlightRef.current) return;
 
+    const chosenRole: UserRole = targetRole === 'operator' ? 'operator' : 'traveler';
+    setRole(chosenRole);
     googleInFlightRef.current = true;
     setError(null);
     setAuthError(null);
     setSuccessMessage(null);
-    setIsGoogleLoading(true);
+    setGoogleFallback(null);
+    setGoogleLoadingRole(chosenRole);
 
-    const { error: oauthError } = await startGoogleOAuth(targetRole);
-    if (oauthError) {
+    const res = await startGoogleOAuth(chosenRole);
+    if (res.error) {
       googleInFlightRef.current = false;
-      setIsGoogleLoading(false);
-      setAuthError(oauthError);
+      setGoogleLoadingRole(null);
+      setAuthError(res.error);
+      return;
+    }
+
+    if (res.openedInNewTab && res.url) {
+      googleInFlightRef.current = false;
+      setGoogleLoadingRole(null);
+      setGoogleFallback({
+        url: res.url,
+        role: res.role || (chosenRole === 'operator' ? 'operator' : 'traveller'),
+      });
     }
   };
 
@@ -384,41 +398,91 @@ export const AuthPage: React.FC = () => {
 
             {/* GOOGLE OAUTH SIGNUP (TRAVELER & OPERATOR) */}
             <div className="space-y-2.5 pt-1">
-              <button
-                type="button"
-                onClick={(e) => handleGoogleLogin(e, role)}
-                disabled={isGoogleLoading || isSubmitting}
-                className="w-full py-2.5 px-4 text-xs font-bold text-stone-800 bg-white hover:bg-stone-50 disabled:opacity-70 disabled:cursor-wait border border-stone-300 rounded-xl transition-colors flex items-center justify-center gap-2.5 shadow-xs cursor-pointer min-h-[44px]"
+              <div
+                className={`rounded-xl border p-3.5 space-y-2.5 ${
+                  role === 'operator'
+                    ? 'border-safari-dusk/30 bg-desert-atlas-light/40'
+                    : 'border-[#1E5B43]/30 bg-emerald-50/50'
+                }`}
               >
-                {isGoogleLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 shrink-0 animate-spin text-safari-dusk" />
-                    Redirecting to Google...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-                      <path
-                        fill="#4285F4"
-                        d="M23.745 12.27c0-.79-.07-1.54-.19-2.27h-11.3v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M12.255 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96h-3.98v3.09C3.515 21.3 7.565 24 12.255 24z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M5.525 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62h-3.98a11.86 11.86 0 0 0 0 10.76l3.98-3.09z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M12.255 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C18.205 1.19 15.495 0 12.255 0c-4.69 0-8.74 2.7-10.71 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"
-                      />
-                    </svg>
-                    Continue with Google as {role === 'traveler' ? 'Traveler' : 'Operator'}
-                  </>
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className="font-bold text-safari-dusk flex items-center gap-1.5">
+                    {role === 'operator' ? (
+                      <Briefcase className="w-3.5 h-3.5 text-mountain-hostel" />
+                    ) : (
+                      <Compass className="w-3.5 h-3.5 text-[#1E5B43]" />
+                    )}
+                    Google Sign-Up Account Type:
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wide ${
+                      role === 'operator'
+                        ? 'bg-safari-dusk text-white'
+                        : 'bg-[#1E5B43] text-white'
+                    }`}
+                  >
+                    {role === 'operator' ? 'Operator' : 'Traveller'}
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-stone-600 leading-relaxed">
+                  {role === 'operator'
+                    ? 'You are registering with Google as a Kenyan Operator (bid on requests & unlock traveller leads).'
+                    : 'You are registering with Google as a Traveller (post Kenya trip requests & compare private bids).'}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={(e) => handleGoogleLogin(e, role)}
+                  disabled={googleLoadingRole !== null || isSubmitting}
+                  className="w-full py-2.5 px-4 text-xs font-bold text-stone-800 bg-white hover:bg-stone-50 disabled:opacity-70 disabled:cursor-wait border border-stone-300 rounded-xl transition-colors flex items-center justify-center gap-2.5 shadow-xs cursor-pointer min-h-[44px]"
+                >
+                  {googleLoadingRole !== null ? (
+                    <>
+                      <Loader2 className="w-4 h-4 shrink-0 animate-spin text-safari-dusk" />
+                      Connecting to Google as {role === 'operator' ? 'Operator' : 'Traveller'}...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          fill="#4285F4"
+                          d="M23.745 12.27c0-.79-.07-1.54-.19-2.27h-11.3v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"
+                        />
+                        <path
+                          fill="#34A853"
+                          d="M12.255 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96h-3.98v3.09C3.515 21.3 7.565 24 12.255 24z"
+                        />
+                        <path
+                          fill="#FBBC05"
+                          d="M5.525 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62h-3.98a11.86 11.86 0 0 0 0 10.76l3.98-3.09z"
+                        />
+                        <path
+                          fill="#EA4335"
+                          d="M12.255 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C18.205 1.19 15.495 0 12.255 0c-4.69 0-8.74 2.7-10.71 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"
+                        />
+                      </svg>
+                      Continue with Google as {role === 'operator' ? 'Operator' : 'Traveller'}
+                    </>
+                  )}
+                </button>
+
+                {googleFallback && (
+                  <div className="p-2.5 rounded-lg bg-white border border-emerald-200 text-[11px] text-stone-700 space-y-1.5">
+                    <p>
+                      Google sign-in for <strong>{googleFallback.role === 'operator' ? 'Operator' : 'Traveller'}</strong> opened in a new tab.
+                    </p>
+                    <a
+                      href={googleFallback.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 font-bold text-[#1E5B43] underline hover:text-[#154331]"
+                    >
+                      Didn&apos;t open? Click here to continue to Google &rarr;
+                    </a>
+                  </div>
                 )}
-              </button>
+              </div>
 
               <div className="relative flex items-center">
                 <div className="flex-grow border-t border-stone-200" />
@@ -446,44 +510,120 @@ export const AuthPage: React.FC = () => {
           </>
         )}
 
-        {/* GOOGLE OAUTH SIGN IN */}
+        {/* GOOGLE OAUTH SIGN IN (EXPLICIT TRAVELLER VS OPERATOR) */}
         {authMode === 'signin' && (
           <div className="space-y-2.5">
-            <button
-              type="button"
-              onClick={(e) => handleGoogleLogin(e, role)}
-              disabled={isGoogleLoading || isSubmitting}
-              className="w-full py-2.5 px-4 text-xs font-bold text-stone-800 bg-white hover:bg-stone-50 disabled:opacity-70 disabled:cursor-wait border border-stone-300 rounded-xl transition-colors flex items-center justify-center gap-2.5 shadow-xs cursor-pointer min-h-[44px]"
-            >
-              {isGoogleLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 shrink-0 animate-spin text-safari-dusk" />
-                  Redirecting to Google...
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-                    <path
-                      fill="#4285F4"
-                      d="M23.745 12.27c0-.79-.07-1.54-.19-2.27h-11.3v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12.255 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96h-3.98v3.09C3.515 21.3 7.565 24 12.255 24z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.525 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62h-3.98a11.86 11.86 0 0 0 0 10.76l3.98-3.09z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12.255 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C18.205 1.19 15.495 0 12.255 0c-4.69 0-8.74 2.7-10.71 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"
-                    />
-                  </svg>
-                  Continue with Google
-                </>
-              )}
-            </button>
+            <div className="text-xs font-semibold text-safari-dusk">
+              Continue with Google — choose your account type:
+            </div>
+
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={(e) => handleGoogleLogin(e, 'traveler')}
+                disabled={googleLoadingRole !== null || isSubmitting}
+                className="w-full py-2.5 px-4 text-left bg-white hover:bg-emerald-50/50 disabled:opacity-70 disabled:cursor-wait border border-[#1E5B43]/40 rounded-xl transition-colors flex items-center justify-between gap-2.5 shadow-xs cursor-pointer min-h-[52px]"
+              >
+                <span className="flex items-center gap-2.5 min-w-0">
+                  {googleLoadingRole === 'traveler' ? (
+                    <Loader2 className="w-4 h-4 shrink-0 animate-spin text-[#1E5B43]" />
+                  ) : (
+                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        fill="#4285F4"
+                        d="M23.745 12.27c0-.79-.07-1.54-.19-2.27h-11.3v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12.255 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96h-3.98v3.09C3.515 21.3 7.565 24 12.255 24z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.525 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62h-3.98a11.86 11.86 0 0 0 0 10.76l3.98-3.09z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12.255 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C18.205 1.19 15.495 0 12.255 0c-4.69 0-8.74 2.7-10.71 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"
+                      />
+                    </svg>
+                  )}
+                  <span className="flex flex-col min-w-0">
+                    <span className="text-xs font-bold text-stone-900">
+                      {googleLoadingRole === 'traveler'
+                        ? 'Connecting to Google as Traveller...'
+                        : 'Continue with Google as Traveller'}
+                    </span>
+                    <span className="text-[11px] text-stone-500">
+                      Post trip requests &amp; compare operator bids
+                    </span>
+                  </span>
+                </span>
+                <span className="px-2 py-0.5 rounded-md bg-[#1E5B43] text-white text-[10px] font-bold uppercase shrink-0">
+                  Traveller
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={(e) => handleGoogleLogin(e, 'operator')}
+                disabled={googleLoadingRole !== null || isSubmitting}
+                className="w-full py-2.5 px-4 text-left bg-white hover:bg-desert-atlas-light/40 disabled:opacity-70 disabled:cursor-wait border border-safari-dusk/40 rounded-xl transition-colors flex items-center justify-between gap-2.5 shadow-xs cursor-pointer min-h-[52px]"
+              >
+                <span className="flex items-center gap-2.5 min-w-0">
+                  {googleLoadingRole === 'operator' ? (
+                    <Loader2 className="w-4 h-4 shrink-0 animate-spin text-safari-dusk" />
+                  ) : (
+                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        fill="#4285F4"
+                        d="M23.745 12.27c0-.79-.07-1.54-.19-2.27h-11.3v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12.255 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96h-3.98v3.09C3.515 21.3 7.565 24 12.255 24z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.525 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62h-3.98a11.86 11.86 0 0 0 0 10.76l3.98-3.09z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12.255 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C18.205 1.19 15.495 0 12.255 0c-4.69 0-8.74 2.7-10.71 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"
+                      />
+                    </svg>
+                  )}
+                  <span className="flex flex-col min-w-0">
+                    <span className="text-xs font-bold text-stone-900">
+                      {googleLoadingRole === 'operator'
+                        ? 'Connecting to Google as Operator...'
+                        : 'Continue with Google as Operator'}
+                    </span>
+                    <span className="text-[11px] text-stone-500">
+                      Browse open requests, bid &amp; unlock leads
+                    </span>
+                  </span>
+                </span>
+                <span className="px-2 py-0.5 rounded-md bg-safari-dusk text-white text-[10px] font-bold uppercase shrink-0">
+                  Operator
+                </span>
+              </button>
+            </div>
+
+            {googleFallback && (
+              <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] text-stone-700 space-y-1.5">
+                <p>
+                  Google sign-in for <strong>{googleFallback.role === 'operator' ? 'Operator' : 'Traveller'}</strong> opened in a new tab.
+                </p>
+                <a
+                  href={googleFallback.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 font-bold text-[#1E5B43] underline hover:text-[#154331]"
+                >
+                  Didn&apos;t open? Click here to continue to Google &rarr;
+                </a>
+              </div>
+            )}
 
             <div className="relative flex items-center">
               <div className="flex-grow border-t border-stone-200" />
@@ -519,11 +659,6 @@ export const AuthPage: React.FC = () => {
             <label className="text-xs font-semibold text-safari-dusk">
               {authMode === 'register' ? '4. Password (minimum 6 characters) *' : 'Password *'}
             </label>
-            {authMode === 'signin' && (
-              <span className="text-[11px] text-stone-500">
-                Default demo pass: <code className="bg-stone-100 px-1 py-0.5 rounded text-stone-700">safari123</code>
-              </span>
-            )}
           </div>
           <div className="relative">
             <input

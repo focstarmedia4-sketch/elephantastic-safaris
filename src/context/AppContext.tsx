@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef, ReactNode } from 'react';
 import { supabase } from '../supabaseClient';
 import {
   User,
@@ -23,9 +23,16 @@ import {
 import { SEED_BLOG_POSTS, SEED_ADMIN_SETTINGS } from '../data/seedData';
 import { getPathForTab, parseLocationToTab, getPageTitleForTab } from '../utils/routes';
 import {
+  readOAuthRoleIntent,
+  clearOAuthRoleIntent,
+  readOAuthErrorFromUrl,
+  OAuthSignupRole,
+} from '../utils/googleAuth';
+import {
   OperatorPassRecord,
   loadPublicSupabaseData,
   loadAuthenticatedSupabaseState,
+  syncOAuthUserProfileRoleInDb,
   createRequestWithContactsInDb,
   updateRequestInDb,
   insertBidInDb,
@@ -380,6 +387,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const closeAuthPrompt = useCallback(() => setAuthPrompt(null), []);
 
+  // Track pending Google OAuth role intent read from callback URL / handshake cookie
+  const pendingOAuthRoleRef = useRef<OAuthSignupRole | null>(readOAuthRoleIntent());
+  const oauthRoleSyncInFlightRef = useRef<boolean>(false);
+
   // Refresh everything from Supabase using the current Supabase Auth session
   const refreshData = useCallback(async () => {
     setIsLoadingData(true);
@@ -394,7 +405,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
 
       if (session?.user?.id) {
-        const loaded = await loadAuthenticatedSupabaseState(session.user.id);
+        // If returning from Google OAuth with a chosen role ('traveller' | 'operator'),
+        // register/sync their `profiles.role` in Supabase before loading role-filtered data.
+        let didCompleteOAuthRoleSync = false;
+        const requestedOAuthRole = pendingOAuthRoleRef.current;
+
+        if (requestedOAuthRole && !oauthRoleSyncInFlightRef.current) {
+          oauthRoleSyncInFlightRef.current = true;
+          try {
+            const syncRes = await syncOAuthUserProfileRoleInDb(session.user, requestedOAuthRole);
+            pendingOAuthRoleRef.current = null;
+            clearOAuthRoleIntent();
+            didCompleteOAuthRoleSync = true;
+            if (syncRes.error) {
+              reportError(syncRes.error);
+            }
+          } finally {
+            oauthRoleSyncInFlightRef.current = false;
+          }
+        }
+
+        const loaded = await loadAuthenticatedSupabaseState(session.user.id, session.user);
         setCurrentUser(loaded.profile);
         setCurrentOperator(loaded.operatorProfile);
         setOperators(loaded.operators);
@@ -411,6 +442,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         if (loaded.errors.length > 0) {
           reportError(loaded.errors[0]);
+        }
+
+        // After finishing a Google OAuth callback, route directly to the user's registered workspace
+        if (didCompleteOAuthRoleSync && loaded.profile) {
+          setAuthPrompt(null);
+          if (loaded.profile.role === 'operator') {
+            const targetTab = loaded.operatorProfile ? 'operator-dashboard' : 'operator-signup';
+            setActiveTab(targetTab);
+          } else if (loaded.profile.role === 'traveler') {
+            setActiveTab('traveler-my-requests');
+          } else {
+            setActiveTab('home');
+          }
         }
       } else {
         setCurrentUser(null);
@@ -434,16 +478,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } finally {
       setIsLoadingData(false);
     }
-  }, [reportError]);
+  }, [reportError, setActiveTab]);
 
   // Initial load + listen to Supabase Auth state changes
   useEffect(() => {
+    const urlOAuthError = readOAuthErrorFromUrl();
+    if (urlOAuthError) {
+      reportError(`Google OAuth error: ${urlOAuthError}`);
+      clearOAuthRoleIntent();
+      pendingOAuthRoleRef.current = null;
+    }
+
     void refreshData();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
+        pendingOAuthRoleRef.current = null;
+        clearOAuthRoleIntent();
         setCurrentUser(null);
         setCurrentOperator(null);
         setOperators([]);
@@ -460,22 +513,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return;
       }
 
-      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && session?.user) {
-        void refreshData();
-        if (event === 'SIGNED_IN' && session.user.app_metadata?.provider === 'google') {
-          setAuthPrompt(null);
-          if (window.location.pathname !== '/') {
-            window.history.pushState(null, '', '/');
-          }
-          setActiveTabState('home');
+      if (
+        (event === 'INITIAL_SESSION' ||
+          event === 'SIGNED_IN' ||
+          event === 'TOKEN_REFRESHED' ||
+          event === 'USER_UPDATED') &&
+        session?.user
+      ) {
+        if (!pendingOAuthRoleRef.current) {
+          pendingOAuthRoleRef.current = readOAuthRoleIntent();
         }
+        void refreshData();
       }
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [refreshData]);
+  }, [refreshData, reportError]);
 
   // Re-fetch fresh Supabase rows whenever navigating to dashboard / request pages
   useEffect(() => {
