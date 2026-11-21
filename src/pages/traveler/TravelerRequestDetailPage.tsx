@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { Currency, Operator } from '../../types';
 import { ReportModal } from '../../components/ReportModal';
+import { ShareRequestButton } from '../../components/ShareRequestButton';
 import { parseBidMessages } from '../../utils/bidFollowUps';
 
 export const TravelerRequestDetailPage: React.FC = () => {
@@ -454,6 +455,8 @@ export const TravelerRequestDetailPage: React.FC = () => {
                 {unlocksLeft} of {unlockLimit} unlocks left
               </span>
             )}
+
+            <ShareRequestButton request={request} variant="compact" />
           </div>
         </div>
 

@@ -17,6 +17,7 @@ import { HowItWorksPage } from './pages/HowItWorksPage';
 import { AuthPage } from './pages/AuthPage';
 import { BlogPage } from './pages/BlogPage';
 import { BlogPostDetailPage } from './pages/BlogPostDetailPage';
+import { SharedRequestPage } from './pages/SharedRequestPage';
 
 // Traveler Pages
 import { PostRequestPage } from './pages/traveler/PostRequestPage';
@@ -37,7 +38,7 @@ import { ReportsPaymentsPage } from './pages/admin/ReportsPaymentsPage';
 
 import { Users, Compass, Briefcase, ShieldCheck } from 'lucide-react';
 
-const PUBLIC_TABS = new Set(['home', 'how-it-works', 'login', 'blog', 'blog-detail']);
+const PUBLIC_TABS = new Set(['home', 'how-it-works', 'login', 'blog', 'blog-detail', 'shared-request']);
 
 const AppContent: React.FC = () => {
   const { activeTab, setActiveTab, currentUser } = useApp();
@@ -114,10 +115,13 @@ const AppContent: React.FC = () => {
         return <BlogPage />;
       case 'blog-detail':
         return <BlogPostDetailPage />;
+      case 'shared-request':
+        return <SharedRequestPage />;
 
       // Traveler pages
       case 'traveler-post':
         return <PostRequestPage />;
+      case 'traveler-dashboard':
       case 'traveler-my-requests':
         return <MyRequestsPage />;
       case 'traveler-request-detail':

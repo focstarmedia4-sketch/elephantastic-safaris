@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { BLOG_CATEGORIES } from '../data/seedData';
 import { BlogCategory } from '../types';
+import { ShareRequestButton } from '../components/ShareRequestButton';
 import { Compass, Clock, Check, ArrowRight, Building2, Trees, Home as HomeIcon, MapPin, Unlock } from 'lucide-react';
 
 const HERO_SLIDES = [
@@ -387,14 +388,14 @@ export const HomePage: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="pt-2">
+                  <div className="pt-2 flex items-center gap-2">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleCardClick();
                       }}
-                      className={`w-full py-2.5 px-3 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs min-h-[44px] ${
+                      className={`flex-1 py-2.5 px-3 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs min-h-[44px] ${
                         isOpen
                           ? 'bg-[#1E5B43] hover:bg-[#154331] text-white'
                           : 'bg-stone-600 hover:bg-stone-700 text-white'
@@ -415,6 +416,7 @@ export const HomePage: React.FC = () => {
                         <span>Closed · View Request</span>
                       )}
                     </button>
+                    <ShareRequestButton request={req} variant="button" className="min-h-[44px] shrink-0" />
                   </div>
                 </div>
               </div>

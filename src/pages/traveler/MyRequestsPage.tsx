@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { TravelerProfileModal } from '../../components/TravelerProfileModal';
 import { PostRequestModal } from '../../components/PostRequestModal';
+import { ShareRequestButton } from '../../components/ShareRequestButton';
 import { parseBidMessages } from '../../utils/bidFollowUps';
 
 export const MyRequestsPage: React.FC = () => {
@@ -608,6 +609,7 @@ export const MyRequestsPage: React.FC = () => {
                           Booked
                         </span>
                       )}
+                      <ShareRequestButton request={req} variant="compact" />
                     </div>
                   </div>
 

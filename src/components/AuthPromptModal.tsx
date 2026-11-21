@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import { UserRole } from '../types';
 import { LegalModal } from './LegalModal';
 import { supabase } from '../supabaseClient';
+import { startGoogleOAuth } from '../utils/googleAuth';
 import {
   Compass,
   Briefcase,
@@ -18,6 +19,7 @@ import {
   ArrowRight,
   Shield,
   Check,
+  Loader2,
 } from 'lucide-react';
 
 export const AuthPromptModal: React.FC = () => {
@@ -40,17 +42,31 @@ export const AuthPromptModal: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const googleInFlightRef = React.useRef(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Sync role if prompt changes
+  // Sync role and reset transient submission state whenever prompt opens/changes
   React.useEffect(() => {
     if (authPrompt?.role) {
       setRole(authPrompt.role);
     }
+    googleInFlightRef.current = false;
+    setIsGoogleLoading(false);
+    setIsSubmitting(false);
     setError(null);
     setAuthError(null);
     setSuccessMsg(null);
-  }, [authPrompt?.role]);
+  }, [authPrompt?.role, authPrompt?.isOpen]);
+
+  React.useEffect(() => {
+    const resetGoogleState = () => {
+      googleInFlightRef.current = false;
+      setIsGoogleLoading(false);
+    };
+    window.addEventListener('pageshow', resetGoogleState);
+    return () => window.removeEventListener('pageshow', resetGoogleState);
+  }, []);
 
   if (!authPrompt?.isOpen) return null;
 
@@ -154,26 +170,25 @@ export const AuthPromptModal: React.FC = () => {
     }
   };
 
-  const handleGoogleLogin = async (targetRole: UserRole = role) => {
+  const handleGoogleLogin = async (
+    e: React.MouseEvent<HTMLButtonElement>,
+    targetRole: UserRole = role
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (googleInFlightRef.current) return;
+
+    googleInFlightRef.current = true;
     setError(null);
     setAuthError(null);
     setSuccessMsg(null);
-    setIsSubmitting(true);
-    try {
-      localStorage.setItem('elephantastic_oauth_role', targetRole);
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin,
-        },
-      });
-      if (oauthError) {
-        setAuthError(oauthError.message);
-        setIsSubmitting(false);
-      }
-    } catch (err) {
-      setAuthError(err instanceof Error ? err.message : 'Google sign-in failed. Please try again.');
-      setIsSubmitting(false);
+    setIsGoogleLoading(true);
+
+    const { error: oauthError } = await startGoogleOAuth(targetRole);
+    if (oauthError) {
+      googleInFlightRef.current = false;
+      setIsGoogleLoading(false);
+      setAuthError(oauthError);
     }
   };
 
@@ -320,31 +335,40 @@ export const AuthPromptModal: React.FC = () => {
             <div className="space-y-2">
               <button
                 type="button"
-                onClick={() => handleGoogleLogin(role)}
-                disabled={isSubmitting}
-                className="w-full py-2.5 px-4 text-xs font-bold text-stone-800 bg-white hover:bg-stone-50 border border-stone-300 rounded-xl transition-colors flex items-center justify-center gap-2.5 shadow-xs cursor-pointer min-h-[44px]"
+                onClick={(e) => handleGoogleLogin(e, role)}
+                disabled={isGoogleLoading || isSubmitting}
+                className="w-full py-2.5 px-4 text-xs font-bold text-stone-800 bg-white hover:bg-stone-50 disabled:opacity-70 disabled:cursor-wait border border-stone-300 rounded-xl transition-colors flex items-center justify-center gap-2.5 shadow-xs cursor-pointer min-h-[44px]"
               >
-                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-                  <path
-                    fill="#4285F4"
-                    d="M23.745 12.27c0-.79-.07-1.54-.19-2.27h-11.3v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12.255 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96h-3.98v3.09C3.515 21.3 7.565 24 12.255 24z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.525 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62h-3.98a11.86 11.86 0 0 0 0 10.76l3.98-3.09z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12.255 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C18.205 1.19 15.495 0 12.255 0c-4.69 0-8.74 2.7-10.71 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"
-                  />
-                </svg>
-                {authMode === 'register'
-                  ? `Continue with Google as ${role === 'traveler' ? 'Traveler' : 'Operator'}`
-                  : 'Continue with Google'}
+                {isGoogleLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 shrink-0 animate-spin text-safari-dusk" />
+                    Redirecting to Google...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        fill="#4285F4"
+                        d="M23.745 12.27c0-.79-.07-1.54-.19-2.27h-11.3v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12.255 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96h-3.98v3.09C3.515 21.3 7.565 24 12.255 24z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.525 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62h-3.98a11.86 11.86 0 0 0 0 10.76l3.98-3.09z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12.255 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C18.205 1.19 15.495 0 12.255 0c-4.69 0-8.74 2.7-10.71 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"
+                      />
+                    </svg>
+                    {authMode === 'register'
+                      ? `Continue with Google as ${role === 'traveler' ? 'Traveler' : 'Operator'}`
+                      : 'Continue with Google'}
+                  </>
+                )}
               </button>
 
               <div className="relative flex items-center">

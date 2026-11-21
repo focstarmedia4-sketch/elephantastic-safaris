@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Currency, TravelerContact, Bid } from '../../types';
 import { parseBidMessages } from '../../utils/bidFollowUps';
+import { ShareRequestButton } from '../../components/ShareRequestButton';
 import {
   Lock,
   Unlock,
@@ -421,6 +422,7 @@ export const OperatorRequestDetailPage: React.FC = () => {
               <BookmarkIcon className={`w-3.5 h-3.5 ${isBookmarked(request.id) ? 'fill-current' : ''}`} />
               <span>{isBookmarked(request.id) ? 'Bookmarked' : 'Bookmark'}</span>
             </button>
+            <ShareRequestButton request={request} variant="compact" />
           </div>
           <div className="flex items-center gap-2 text-xs text-stone-500">
             <span className="font-bold text-[#1E5B43] uppercase tracking-wider">

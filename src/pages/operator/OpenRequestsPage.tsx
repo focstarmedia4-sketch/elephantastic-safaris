@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { TravelCategory } from '../../types';
+import { ShareRequestButton } from '../../components/ShareRequestButton';
 import { Compass, Lock, Unlock, CreditCard, Clock, ArrowRight, Filter, ShieldAlert, Bookmark as BookmarkIcon } from 'lucide-react';
 
 export const OpenRequestsPage: React.FC = () => {
@@ -203,6 +204,7 @@ export const OpenRequestsPage: React.FC = () => {
                     >
                       <BookmarkIcon className={`w-3.5 h-3.5 ${isBookmarked(req.id) ? 'fill-current' : ''}`} />
                     </button>
+                    <ShareRequestButton request={req} variant="icon" />
                   </div>
                 </div>
 
@@ -325,7 +327,7 @@ export const OpenRequestsPage: React.FC = () => {
               </div>
 
               {/* Action Bar */}
-              <div className="p-4 bg-desert-atlas-light/30 border-t border-desert-atlas/15 flex items-center justify-between">
+              <div className="p-4 bg-desert-atlas-light/30 border-t border-desert-atlas/15 flex items-center justify-between gap-2">
                 {isLocked ? (
                   <span className="text-xs text-mountain-hostel/60 font-medium flex items-center gap-1">
                     <Lock className="w-3.5 h-3.5 text-mountain-hostel/50" />
@@ -334,12 +336,13 @@ export const OpenRequestsPage: React.FC = () => {
                 ) : (
                   <button
                     onClick={() => setActiveTab('operator-request-detail', req.id)}
-                    className="w-full py-2.5 px-3 text-xs font-bold text-white bg-[#1E5B43] hover:bg-[#154331] rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer min-h-[44px]"
+                    className="flex-1 py-2.5 px-3 text-xs font-bold text-white bg-[#1E5B43] hover:bg-[#154331] rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer min-h-[44px]"
                   >
                     <span>{alreadyUnlocked ? 'View Details & Contact' : 'View Details, Bid & Unlock'}</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 )}
+                <ShareRequestButton request={req} variant="button" className="min-h-[44px] shrink-0" />
               </div>
             </div>
           );

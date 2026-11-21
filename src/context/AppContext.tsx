@@ -36,6 +36,7 @@ import {
   SEED_ADMIN_SETTINGS,
 } from '../data/seedData';
 import { IMAGES } from '../assets/images';
+import { getPathForTab, parseLocationToTab, getPageTitleForTab } from '../utils/routes';
 
 interface SlotInfo {
   total: number;
@@ -340,34 +341,41 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setAdminSettings((prev) => ({ ...prev, ...updates }));
   };
 
-  // Navigation tab state
-  const [activeTab, setActiveTabState] = useState<string>(() =>
-    window.location.pathname === '/login' ? 'login' : 'home'
-  );
-  const [tabParam, setTabParam] = useState<string | null>(() =>
-    window.location.pathname === '/login' ? 'signin' : null
-  );
+  // Navigation tab state initialized from the browser URL so shared links open directly to that page
+  const initialRoute = useMemo(() => parseLocationToTab(window.location.pathname), []);
+  const [activeTab, setActiveTabState] = useState<string>(initialRoute.tab);
+  const [tabParam, setTabParam] = useState<string | null>(initialRoute.param);
 
   const setActiveTab = (tab: string, param?: string) => {
+    const resolvedParam = param || null;
     setActiveTabState(tab);
-    setTabParam(param || null);
-    if (tab === 'login' && window.location.pathname !== '/login') {
-      window.history.pushState(null, '', '/login');
-    } else if (tab === 'home' && window.location.pathname !== '/') {
-      window.history.pushState(null, '', '/');
+    setTabParam(resolvedParam);
+
+    const targetPath = getPathForTab(tab, resolvedParam);
+    const preserveSignupQuery =
+      tab === 'login' &&
+      targetPath === '/login' &&
+      window.location.pathname === '/login' &&
+      window.location.search.includes('signup=success');
+
+    if (!preserveSignupQuery && (window.location.pathname !== targetPath || window.location.search)) {
+      window.history.pushState({ tab, param: resolvedParam }, '', targetPath);
     }
+
+    document.title = getPageTitleForTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   useEffect(() => {
+    document.title = getPageTitleForTab(activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
     const handlePopState = () => {
-      if (window.location.pathname === '/login') {
-        setActiveTabState('login');
-        setTabParam('signin');
-      } else if (window.location.pathname === '/') {
-        setActiveTabState('home');
-        setTabParam(null);
-      }
+      const parsed = parseLocationToTab(window.location.pathname);
+      setActiveTabState(parsed.tab);
+      setTabParam(parsed.param);
+      document.title = getPageTitleForTab(parsed.tab);
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
