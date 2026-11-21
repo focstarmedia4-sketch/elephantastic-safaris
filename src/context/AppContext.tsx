@@ -37,6 +37,28 @@ import {
 } from '../data/seedData';
 import { IMAGES } from '../assets/images';
 import { getPathForTab, parseLocationToTab, getPageTitleForTab } from '../utils/routes';
+import {
+  loadMarketplaceData,
+  loadUserDatabaseData,
+  getAuthenticatedUserId,
+  upsertProfileInDb,
+  createTravelRequestInDb,
+  updateTravelRequestInDb,
+  deleteTravelRequestInDb,
+  upsertOperatorInDb,
+  updateOperatorInDb,
+  createBidInDb,
+  updateBidInDb,
+  createBookmarkInDb,
+  deleteBookmarkInDb,
+  createContactUnlockInDb,
+  createPaymentInDb,
+  createReviewInDb,
+  createBlogPostInDb,
+  deleteBlogPostInDb,
+  createReportInDb,
+  updateReportStatusInDb,
+} from '../services/supabaseData';
 
 interface SlotInfo {
   total: number;
@@ -77,7 +99,7 @@ interface AppContextType {
   
   // User Management & Role Switcher
   switchUser: (userId: string) => void;
-  loginUser: (email: string, role: UserRole, name: string, country: string, password?: string) => void;
+  loginUser: (email: string, role: UserRole, name: string, country: string, password?: string, authUserId?: string) => void;
   registerUser: (data: { email: string; password?: string; role: UserRole; name: string; country: string }) => { success: boolean; message?: string };
   loginWithCredentials: (email: string, password?: string) => { success: boolean; message?: string };
   logoutUser: () => void;
@@ -125,6 +147,7 @@ interface AppContextType {
   reviewOperator: (operatorId: string, requestId: string, rating: number, comment: string, tripType: string) => void;
   canEditRequest: (requestId: string) => { allowed: boolean; reason?: string };
   editTravelRequest: (requestId: string, updates: Partial<TravelRequest>) => boolean;
+  deleteTravelRequest: (requestId: string) => void;
   repostRequest: (requestId: string) => string;
   markRequestBooked: (requestId: string, operatorId: string) => void;
   updateTravelerProfile: (data: { name: string; country: string; phone?: string; preferred_currency?: Currency }) => void;
@@ -461,22 +484,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const allUsersRef = React.useRef(allUsers);
   allUsersRef.current = allUsers;
+  const authUserIdRef = React.useRef<string | null>(null);
+
+  const mergeById = <T extends { id: string }>(remote: T[], fallback: T[]): T[] => {
+    if (remote.length === 0) return fallback;
+    const seen = new Set(remote.map((item) => item.id));
+    return [...remote, ...fallback.filter((item) => !seen.has(item.id))];
+  };
 
   useEffect(() => {
-    const syncGoogleSession = (
+    let isMounted = true;
+
+    const hydrateAuthenticatedSession = async (
       sessionUser: {
+        id: string;
         email?: string;
         app_metadata?: Record<string, unknown>;
         user_metadata?: Record<string, unknown>;
       } | null
     ) => {
-      if (!sessionUser?.email) return;
-      const provider = sessionUser.app_metadata?.provider;
-      if (provider !== 'google') return;
+      if (!sessionUser?.id || !sessionUser.email) {
+        authUserIdRef.current = null;
+        return;
+      }
+
+      const authUid = sessionUser.id;
+      authUserIdRef.current = authUid;
 
       const email = sessionUser.email.trim();
       const storedRole = localStorage.getItem('elephantastic_oauth_role') as UserRole | null;
-      const role: UserRole =
+      const fallbackRole: UserRole =
         storedRole === 'operator' || storedRole === 'traveler' ? storedRole : 'traveler';
       const displayName =
         (sessionUser.user_metadata?.full_name as string | undefined) ||
@@ -487,35 +524,46 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       localStorage.setItem('elephantastic_has_registered', 'true');
       localStorage.removeItem('elephantastic_oauth_role');
 
-      const existing = allUsersRef.current.find(
-        (u) => u.email.toLowerCase() === email.toLowerCase()
-      );
-      if (existing) {
-        setCurrentUserId(existing.id);
-        return;
+      // Load all persisted rows belonging to this authenticated user from Supabase
+      const dbData = await loadUserDatabaseData(authUid);
+      if (!isMounted) return;
+
+      const resolvedRole: UserRole = dbData.profile?.role || fallbackRole;
+      const syncedUser: User = {
+        id: authUid,
+        email,
+        role: resolvedRole,
+        name: dbData.profile?.name || displayName,
+        country: dbData.profile?.country || (resolvedRole === 'operator' ? 'Kenya' : 'United Kingdom'),
+        phone: dbData.profile?.phone,
+        preferred_currency: dbData.profile?.preferred_currency || 'USD',
+        created_at: dbData.profile?.created_at || new Date().toISOString(),
+      };
+
+      if (!dbData.profile) {
+        void upsertProfileInDb(syncedUser);
       }
 
-      const newId = `user_${Date.now()}`;
-      const newUser: User = {
-        id: newId,
-        email,
-        role,
-        name: displayName,
-        country: role === 'operator' ? 'Kenya' : 'United Kingdom',
-        created_at: new Date().toISOString(),
-      };
-      setAllUsers((prev) =>
-        prev.some((u) => u.email.toLowerCase() === email.toLowerCase()) ? prev : [...prev, newUser]
-      );
-      setCurrentUserId(newId);
+      setAllUsers((prev) => {
+        const filtered = prev.filter(
+          (u) => u.id !== authUid && u.email.toLowerCase() !== email.toLowerCase()
+        );
+        return [syncedUser, ...filtered];
+      });
+      setCurrentUserId(authUid);
 
-      if (role === 'operator') {
+      if (dbData.requests.length > 0) {
+        setRequests((prev) => mergeById(dbData.requests, prev));
+      }
+      if (dbData.operators.length > 0) {
+        setOperators((prev) => mergeById(dbData.operators, prev));
+      } else if (resolvedRole === 'operator') {
         const newOp: Operator = {
-          id: `op_${Date.now()}`,
-          user_id: newId,
-          business_name: `${displayName} Safaris & Hospitality`,
-          contact_name: displayName,
-          phone: '+254 700 000 000',
+          id: `op_${authUid}`,
+          user_id: authUid,
+          business_name: `${syncedUser.name} Safaris & Hospitality`,
+          contact_name: syncedUser.name,
+          phone: syncedUser.phone || '+254 700 000 000',
           email,
           categories: ['safari', 'hotel'],
           regions: ['Maasai Mara', 'Nairobi'],
@@ -527,70 +575,179 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           created_at: new Date().toISOString(),
         };
         setOperators((prev) =>
-          prev.some((op) => op.email.toLowerCase() === email.toLowerCase()) ? prev : [...prev, newOp]
+          prev.some((op) => op.user_id === authUid || op.email.toLowerCase() === email.toLowerCase())
+            ? prev
+            : [newOp, ...prev]
         );
+        void upsertOperatorInDb(authUid, newOp);
+      }
+      if (dbData.bids.length > 0) {
+        setBids((prev) => mergeById(dbData.bids, prev));
+      }
+      if (dbData.bookmarks.length > 0) {
+        setBookmarks((prev) => mergeById(dbData.bookmarks, prev));
+      }
+      if (dbData.unlocks.length > 0) {
+        setUnlocks((prev) => mergeById(dbData.unlocks, prev));
+      }
+      if (dbData.payments.length > 0) {
+        setPayments((prev) => mergeById(dbData.payments, prev));
+      }
+      if (dbData.reviews.length > 0) {
+        setReviews((prev) => mergeById(dbData.reviews, prev));
+      }
+      if (dbData.blogPosts.length > 0) {
+        setBlogPosts((prev) => mergeById(dbData.blogPosts, prev));
+      }
+      if (dbData.reports.length > 0) {
+        setReports((prev) => mergeById(dbData.reports, prev));
       }
     };
 
+    const refreshMarketplace = async () => {
+      const market = await loadMarketplaceData();
+      if (!isMounted) return;
+      if (market.requests.length > 0) {
+        setRequests((prev) => mergeById(market.requests, prev));
+      }
+      if (market.operators.length > 0) {
+        setOperators((prev) => mergeById(market.operators, prev));
+      }
+      if (market.reviews.length > 0) {
+        setReviews((prev) => mergeById(market.reviews, prev));
+      }
+      if (market.blogPosts.length > 0) {
+        setBlogPosts((prev) => mergeById(market.blogPosts, prev));
+      }
+    };
+
+    void refreshMarketplace();
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
-        syncGoogleSession(session.user);
+        void hydrateAuthenticatedSession(session.user);
       }
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session?.user?.app_metadata?.provider === 'google') {
-        syncGoogleSession(session.user);
-        setAuthPrompt(null);
-        if (window.location.pathname !== '/') {
-          window.history.pushState(null, '', '/');
+      if (event === 'SIGNED_OUT') {
+        authUserIdRef.current = null;
+        void refreshMarketplace();
+        return;
+      }
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
+        void hydrateAuthenticatedSession(session.user);
+        if (event === 'SIGNED_IN' && session.user.app_metadata?.provider === 'google') {
+          setAuthPrompt(null);
+          if (window.location.pathname !== '/') {
+            window.history.pushState(null, '', '/');
+          }
+          setActiveTabState('home');
         }
-        setActiveTabState('home');
       }
     });
 
     return () => {
+      isMounted = false;
       subscription.unsubscribe();
     };
   }, []);
 
+  // Refresh marketplace travel requests whenever viewing feeds or switching to operator pages
+  useEffect(() => {
+    const marketplaceTabs = new Set([
+      'home',
+      'operator-open-requests',
+      'operator-request-detail',
+      'operator-dashboard',
+      'shared-request',
+      'traveler-my-requests',
+      'traveler-request-detail',
+    ]);
+    if (!marketplaceTabs.has(activeTab)) return;
+
+    let cancelled = false;
+    loadMarketplaceData().then((market) => {
+      if (cancelled) return;
+      if (market.requests.length > 0) {
+        setRequests((prev) => mergeById(market.requests, prev));
+      }
+      if (market.operators.length > 0) {
+        setOperators((prev) => mergeById(market.operators, prev));
+      }
+      if (market.reviews.length > 0) {
+        setReviews((prev) => mergeById(market.reviews, prev));
+      }
+      if (market.blogPosts.length > 0) {
+        setBlogPosts((prev) => mergeById(market.blogPosts, prev));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab]);
+
   const logoutUser = () => {
+    authUserIdRef.current = null;
     void supabase.auth.signOut();
     setCurrentUserId(null);
     localStorage.removeItem(`${STORAGE_PREFIX}current_user_id`);
     setActiveTab('home');
   };
 
-  const loginUser = (email: string, role: UserRole, name: string, country: string, password?: string) => {
-    let existing = allUsers.find((u) => u.email.toLowerCase() === email.toLowerCase());
+  const loginUser = (
+    email: string,
+    role: UserRole,
+    name: string,
+    country: string,
+    password?: string,
+    authUserId?: string
+  ) => {
+    if (authUserId) {
+      authUserIdRef.current = authUserId;
+    }
+
+    const existing = allUsers.find(
+      (u) => (authUserId && u.id === authUserId) || u.email.toLowerCase() === email.toLowerCase()
+    );
     if (existing) {
-      if (password && !existing.password) {
-        // save password if not previously set
-        setAllUsers((prev) =>
-          prev.map((u) => (u.id === existing.id ? { ...u, password } : u))
-        );
-      }
-      setCurrentUserId(existing.id);
+      const targetId = authUserId || existing.id;
+      setAllUsers((prev) =>
+        prev.map((u) =>
+          u.id === existing.id
+            ? {
+                ...u,
+                id: targetId,
+                password: !authUserId && password && !u.password ? password : u.password,
+              }
+            : u
+        )
+      );
+      setCurrentUserId(targetId);
     } else {
-      const newId = `user_${Date.now()}`;
+      const newId = authUserId || `user_${Date.now()}`;
       const newUser: User = {
         id: newId,
         email,
         role,
         name: name || (email.split('@')[0] ?? 'User'),
         country: country || (role === 'operator' ? 'Kenya' : 'United Kingdom'),
-        password: password || 'safari123',
+        ...(authUserId ? {} : { password: password || 'safari123' }),
         created_at: new Date().toISOString(),
       };
       setAllUsers((prev) => [...prev, newUser]);
       setCurrentUserId(newId);
 
+      if (authUserId) {
+        void upsertProfileInDb(newUser);
+      }
+
       if (role === 'operator') {
-        // Create initial pending operator shell
         const newOp: Operator = {
-          id: `op_${Date.now()}`,
+          id: authUserId ? `op_${authUserId}` : `op_${Date.now()}`,
           user_id: newId,
           business_name: `${name} Safaris & Hospitality`,
           contact_name: name,
@@ -606,6 +763,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           created_at: new Date().toISOString(),
         };
         setOperators((prev) => [...prev, newOp]);
+        if (authUserId) {
+          void upsertOperatorInDb(authUserId, newOp);
+        }
       }
     }
 
@@ -768,12 +928,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     setRequests((prev) => [newReq, ...prev]);
 
+    void (async () => {
+      const uid = authUserIdRef.current || (await getAuthenticatedUserId());
+      if (uid) {
+        authUserIdRef.current = uid;
+        await createTravelRequestInDb(uid, {
+          ...newReq,
+          traveler_id: uid,
+        });
+      }
+    })();
+
     // Update currentUser contact info if logged in
     if (currentUser && (data.whatsapp_number || data.call_number)) {
       const bestPhone = data.whatsapp_number || data.call_number;
+      const updatedUser: User = { ...currentUser, phone: currentUser.phone || bestPhone };
       setAllUsers((prev) =>
-        prev.map((u) => (u.id === currentUser.id ? { ...u, phone: u.phone || bestPhone } : u))
+        prev.map((u) => (u.id === currentUser.id ? updatedUser : u))
       );
+      if (authUserIdRef.current) {
+        void upsertProfileInDb({ ...updatedUser, id: authUserIdRef.current });
+      }
     }
     return id;
   };
@@ -785,6 +960,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (req.id !== requestId) return req;
         const currentLimit = req.unlock_limit || req.slot_limit || 30;
         const newLimit = currentLimit + additionalUnlocks;
+        if (authUserIdRef.current) {
+          void updateTravelRequestInDb(authUserIdRef.current, requestId, {
+            unlock_limit: newLimit,
+            slot_limit: newLimit,
+          });
+        }
         return {
           ...req,
           unlock_limit: newLimit,
@@ -805,6 +986,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (req.id !== requestId) return req;
         const currentEnabled = req.unlocks_enabled !== false;
         const newEnabled = !currentEnabled;
+        if (authUserIdRef.current) {
+          void updateTravelRequestInDb(authUserIdRef.current, requestId, {
+            unlocks_enabled: newEnabled,
+            bids_only: !newEnabled,
+          });
+        }
         return {
           ...req,
           unlocks_enabled: newEnabled,
@@ -822,10 +1009,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const currentExp = new Date(req.expires_at).getTime();
         const base = Math.max(currentExp, Date.now());
         const newExp = new Date(base + additionalDays * 24 * 60 * 60 * 1000).toISOString();
+        const nextStatus = req.status === 'expired' ? 'open' : req.status;
+        if (authUserIdRef.current) {
+          void updateTravelRequestInDb(authUserIdRef.current, requestId, {
+            expires_at: newExp,
+            status: nextStatus,
+          });
+        }
         return {
           ...req,
           expires_at: newExp,
-          status: req.status === 'expired' ? 'open' : req.status,
+          status: nextStatus,
         };
       })
     );
@@ -834,17 +1028,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Traveler: Close early
   // Rule: stops new bids AND new unlocks. Confirmation text: "Operators will no longer be able to bid or unlock your contact. You can still see all bids."
   const closeRequestEarly = (requestId: string, reason?: string) => {
+    const closedReason =
+      reason || 'Operators will no longer be able to bid or unlock your contact. You can still see all bids.';
     setRequests((prev) =>
       prev.map((req) =>
         req.id === requestId
           ? {
               ...req,
               status: 'closed',
-              closed_reason: reason || 'Operators will no longer be able to bid or unlock your contact. You can still see all bids.',
+              closed_reason: closedReason,
             }
           : req
       )
     );
+    if (authUserIdRef.current) {
+      void updateTravelRequestInDb(authUserIdRef.current, requestId, {
+        status: 'closed',
+        closed_reason: closedReason,
+      });
+    }
   };
 
   // Traveler: Reopen closed request
@@ -858,6 +1060,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           currentExp > Date.now() + 24 * 60 * 60 * 1000
             ? req.expires_at
             : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        if (authUserIdRef.current) {
+          void updateTravelRequestInDb(authUserIdRef.current, requestId, {
+            status: 'open',
+            expires_at: newExp,
+            closed_reason: undefined,
+          });
+        }
         return {
           ...req,
           status: 'open',
@@ -886,11 +1095,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // Update the bid status to 'contact_shared'
     setBids((prev) =>
-      prev.map((b) =>
-        b.request_id === requestId && b.operator_id === operatorId
-          ? { ...b, status: 'contact_shared' }
-          : b
-      )
+      prev.map((b) => {
+        if (b.request_id === requestId && b.operator_id === operatorId) {
+          if (authUserIdRef.current) {
+            void updateBidInDb(authUserIdRef.current, b.id, { status: 'contact_shared' });
+          }
+          return { ...b, status: 'contact_shared' };
+        }
+        return b;
+      })
     );
   };
 
@@ -899,6 +1112,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setBids((prev) =>
       prev.map((b) => (b.id === bidId ? { ...b, status: 'shortlisted' } : b))
     );
+    if (authUserIdRef.current) {
+      void updateBidInDb(authUserIdRef.current, bidId, { status: 'shortlisted' });
+    }
   };
 
   // Traveler: Decline bid
@@ -906,6 +1122,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setBids((prev) =>
       prev.map((b) => (b.id === bidId ? { ...b, status: 'declined' } : b))
     );
+    if (authUserIdRef.current) {
+      void updateBidInDb(authUserIdRef.current, bidId, { status: 'declined' });
+    }
   };
 
   // Rule: "Edit request: allowed only while the request has no bids and no unlocks"
@@ -942,7 +1161,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setRequests((prev) =>
       prev.map((r) => (r.id === requestId ? { ...r, ...updates } : r))
     );
+    if (authUserIdRef.current) {
+      void updateTravelRequestInDb(authUserIdRef.current, requestId, updates);
+    }
     return true;
+  };
+
+  // Traveler: Delete request
+  const deleteTravelRequest = (requestId: string) => {
+    setRequests((prev) => prev.filter((r) => r.id !== requestId));
+    if (authUserIdRef.current) {
+      void deleteTravelRequestInDb(authUserIdRef.current, requestId);
+    }
   };
 
   // Traveler: Repost expired request (prefilled from old one)
@@ -967,11 +1197,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       closed_reason: undefined,
     };
     setRequests((prev) => [newReq, ...prev]);
+    if (authUserIdRef.current) {
+      void createTravelRequestInDb(authUserIdRef.current, newReq);
+    }
     return newId;
   };
 
   // Traveler: Mark as booked or completed
   const markRequestBooked = (requestId: string, operatorId: string) => {
+    const bookedAt = new Date().toISOString();
     setRequests((prev) =>
       prev.map((r) =>
         r.id === requestId
@@ -979,13 +1213,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               ...r,
               is_booked: true,
               booked_operator_id: operatorId,
-              booked_at: new Date().toISOString(),
+              booked_at: bookedAt,
               status: 'closed',
               closed_reason: 'Booked with operator.',
             }
           : r
       )
     );
+    if (authUserIdRef.current) {
+      void updateTravelRequestInDb(authUserIdRef.current, requestId, {
+        is_booked: true,
+        booked_operator_id: operatorId,
+        booked_at: bookedAt,
+        status: 'closed',
+        closed_reason: 'Booked with operator.',
+      });
+    }
   };
 
   // In-platform Traveler Contact Unlock Notifications
@@ -1027,9 +1270,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Traveler: Update Profile
   const updateTravelerProfile = (data: { name: string; country: string; phone?: string; preferred_currency?: Currency }) => {
     if (!currentUser) return;
+    const updatedUser: User = { ...currentUser, ...data };
     setAllUsers((prev) =>
-      prev.map((u) => (u.id === currentUser.id ? { ...u, ...data } : u))
+      prev.map((u) => (u.id === currentUser.id ? updatedUser : u))
     );
+    if (authUserIdRef.current) {
+      void upsertProfileInDb({ ...updatedUser, id: authUserIdRef.current });
+    }
   };
 
   // Traveler: Review operator
@@ -1053,6 +1300,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       created_at: new Date().toISOString(),
     };
     setReviews((prev) => [newRev, ...prev]);
+    if (authUserIdRef.current) {
+      void createReviewInDb(authUserIdRef.current, newRev);
+    }
 
     // Update operator rating and review count
     setOperators((prev) =>
@@ -1089,6 +1339,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setBookmarks((prev) => {
       const exists = prev.some((b) => b.operator_id === currentOperator.id && b.request_id === requestId);
       if (exists) {
+        if (authUserIdRef.current) {
+          void deleteBookmarkInDb(authUserIdRef.current, currentOperator.id, requestId);
+        }
         return prev.filter((b) => !(b.operator_id === currentOperator.id && b.request_id === requestId));
       } else {
         const newBmk: Bookmark = {
@@ -1097,6 +1350,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           request_id: requestId,
           created_at: new Date().toISOString(),
         };
+        if (authUserIdRef.current) {
+          void createBookmarkInDb(authUserIdRef.current, newBmk);
+        }
         return [newBmk, ...prev];
       }
     });
@@ -1123,19 +1379,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const currentUid = currentUser?.id || `user_op_${Date.now()}`;
     let op = operators.find((o) => o.user_id === currentUid);
     if (op) {
+      const updatedOp: Operator = {
+        ...op,
+        ...data,
+        status: 'approved',
+        is_profile_complete: true,
+        rejection_reason: undefined,
+      };
       setOperators((prev) =>
-        prev.map((o) =>
-          o.user_id === currentUid
-            ? {
-                ...o,
-                ...data,
-                status: 'approved',
-                is_profile_complete: true,
-                rejection_reason: undefined,
-              }
-            : o
-        )
+        prev.map((o) => (o.user_id === currentUid ? updatedOp : o))
       );
+      if (authUserIdRef.current) {
+        void upsertOperatorInDb(authUserIdRef.current, updatedOp);
+      }
     } else {
       const newOp: Operator = {
         id: `op_${Date.now()}`,
@@ -1158,6 +1414,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         created_at: new Date().toISOString(),
       };
       setOperators((prev) => [...prev, newOp]);
+      if (authUserIdRef.current) {
+        void upsertOperatorInDb(authUserIdRef.current, newOp);
+      }
     }
   };
 
@@ -1177,19 +1436,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const currentUid = currentUser?.id || `user_op_${Date.now()}`;
     let op = operators.find((o) => o.user_id === currentUid);
     if (op) {
+      const updatedOp: Operator = {
+        ...op,
+        ...data,
+        is_profile_complete: true,
+        status: 'approved',
+        rejection_reason: undefined,
+      };
       setOperators((prev) =>
-        prev.map((o) =>
-          o.user_id === currentUid
-            ? {
-                ...o,
-                ...data,
-                is_profile_complete: true,
-                status: 'approved',
-                rejection_reason: undefined,
-              }
-            : o
-        )
+        prev.map((o) => (o.user_id === currentUid ? updatedOp : o))
       );
+      if (authUserIdRef.current) {
+        void upsertOperatorInDb(authUserIdRef.current, updatedOp);
+      }
     } else {
       const newOp: Operator = {
         id: `op_${Date.now()}`,
@@ -1212,6 +1471,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         created_at: new Date().toISOString(),
       };
       setOperators((prev) => [...prev, newOp]);
+      if (authUserIdRef.current) {
+        void upsertOperatorInDb(authUserIdRef.current, newOp);
+      }
     }
   };
 
@@ -1300,16 +1562,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     setPayments((prev) => [paymentRec, ...prev]);
+    if (authUserIdRef.current) {
+      void createPaymentInDb(authUserIdRef.current, paymentRec);
+    }
 
     setOperators((prev) =>
       prev.map((op) => {
         if (op.id !== operatorId) return op;
         if (isContactUnlock) {
+          if (authUserIdRef.current) {
+            void updateOperatorInDb(authUserIdRef.current, operatorId, {
+              contact_unlock_expires_at: passExpiresAt,
+            });
+          }
           return {
             ...op,
             contact_unlock_expires_at: passExpiresAt,
           };
         } else {
+          if (authUserIdRef.current) {
+            void updateOperatorInDb(authUserIdRef.current, operatorId, {
+              bidding_pass_expires_at: passExpiresAt,
+              access_expires_at: passExpiresAt,
+            });
+          }
           return {
             ...op,
             bidding_pass_expires_at: passExpiresAt,
@@ -1492,33 +1768,35 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     if (existingBid) {
       const trimmedFollowUp = data.follow_up_message?.trim();
+      const nextFollowUps = trimmedFollowUp
+        ? [
+            ...(existingBid.follow_ups || []),
+            {
+              id: `fu_${Date.now()}`,
+              message: trimmedFollowUp,
+              created_at: new Date().toISOString(),
+            },
+          ]
+        : existingBid.follow_ups;
+
+      const bidUpdates: Partial<Bid> = {
+        price: data.price,
+        currency: data.currency,
+        inclusions: data.inclusions,
+        message: data.message,
+        follow_ups: nextFollowUps,
+        valid_until: data.valid_until,
+        operator_email: email,
+        operator_whatsapp: whatsapp,
+        operator_phone: phone,
+      };
+
       setBids((prev) =>
-        prev.map((b) =>
-          b.id === existingBid.id
-            ? {
-                ...b,
-                price: data.price,
-                currency: data.currency,
-                inclusions: data.inclusions,
-                message: data.message,
-                follow_ups: trimmedFollowUp
-                  ? [
-                      ...(b.follow_ups || []),
-                      {
-                        id: `fu_${Date.now()}`,
-                        message: trimmedFollowUp,
-                        created_at: new Date().toISOString(),
-                      },
-                    ]
-                  : b.follow_ups,
-                valid_until: data.valid_until,
-                operator_email: email,
-                operator_whatsapp: whatsapp,
-                operator_phone: phone,
-              }
-            : b
-        )
+        prev.map((b) => (b.id === existingBid.id ? { ...b, ...bidUpdates } : b))
       );
+      if (authUserIdRef.current) {
+        void updateBidInDb(authUserIdRef.current, existingBid.id, bidUpdates);
+      }
       return { success: true };
     }
 
@@ -1544,6 +1822,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // There is no limit on the number of bids per request. They stay open until the traveler closes the enquiry.
     setBids((prev) => [newBid, ...prev]);
+    if (authUserIdRef.current) {
+      void createBidInDb(authUserIdRef.current, newBid);
+    }
     return { success: true };
   };
 
@@ -1560,6 +1841,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           : op
       )
     );
+    if (authUserIdRef.current) {
+      void updateOperatorInDb(authUserIdRef.current, operatorId, {
+        status: 'approved',
+        rejection_reason: undefined,
+      });
+    }
   };
 
   const adminRejectOperator = (operatorId: string, reason: string) => {
@@ -1574,12 +1861,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           : op
       )
     );
+    if (authUserIdRef.current) {
+      void updateOperatorInDb(authUserIdRef.current, operatorId, {
+        status: 'rejected',
+        rejection_reason: reason,
+      });
+    }
   };
 
   const adminResolveReport = (reportId: string, status: 'resolved' | 'dismissed') => {
     setReports((prev) =>
       prev.map((rep) => (rep.id === reportId ? { ...rep, status } : rep))
     );
+    if (authUserIdRef.current) {
+      void updateReportStatusInDb(authUserIdRef.current, reportId, status);
+    }
   };
 
   // Reporting
@@ -1603,6 +1899,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       created_at: new Date().toISOString(),
     };
     setReports((prev) => [newRep, ...prev]);
+    if (authUserIdRef.current) {
+      void createReportInDb(authUserIdRef.current, newRep);
+    }
   };
 
   // Helpers
@@ -1706,11 +2005,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       published_at: new Date().toISOString(),
     };
     setBlogPosts((prev) => [newPost, ...prev]);
+    if (authUserIdRef.current) {
+      void createBlogPostInDb(authUserIdRef.current, newPost);
+    }
     return newPost.slug;
   };
 
   const deleteBlogPost = (id: string) => {
     setBlogPosts((prev) => prev.filter((p) => p.id !== id));
+    if (authUserIdRef.current) {
+      void deleteBlogPostInDb(authUserIdRef.current, id);
+    }
   };
 
   const getBlogPostBySlug = (slug: string): BlogPost | undefined => {
@@ -1982,6 +2287,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         setUnlocks((prev) => [newUnlock, ...prev]);
         setPayments((prev) => [newPayment, ...prev]);
+        if (authUserIdRef.current) {
+          void createContactUnlockInDb(authUserIdRef.current, newUnlock);
+          void createPaymentInDb(authUserIdRef.current, newPayment);
+        }
 
         return {
           success: true,
@@ -2071,6 +2380,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       };
 
       setPayments((prev) => [newPayment, ...prev]);
+      if (authUserIdRef.current) {
+        void createPaymentInDb(authUserIdRef.current, newPayment);
+        void updateOperatorInDb(authUserIdRef.current, operatorId, {
+          access_expires_at: passExpiresAt,
+          bidding_pass_expires_at: passExpiresAt,
+        });
+      }
       setOperators((prev) =>
         prev.map((op) =>
           op.id === operatorId
@@ -2172,6 +2488,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         reviewOperator,
         canEditRequest,
         editTravelRequest,
+        deleteTravelRequest,
         repostRequest,
         markRequestBooked,
         getTravelerUnlockNotifications,

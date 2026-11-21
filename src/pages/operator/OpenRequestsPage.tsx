@@ -21,7 +21,10 @@ export const OpenRequestsPage: React.FC = () => {
     isContactUnlocked,
   } = useApp();
 
-  const [categoryFilter, setCategoryFilter] = useState<string>(tabParam || 'all');
+  const validCategories = ['all', 'safari', 'hotel', 'bnb'];
+  const [categoryFilter, setCategoryFilter] = useState<string>(
+    tabParam && validCategories.includes(tabParam) ? tabParam : 'all'
+  );
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'locked'>('all');
 
   const hasActivePass = isPassActive(currentOperator);

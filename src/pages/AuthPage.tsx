@@ -179,7 +179,7 @@ export const AuthPage: React.FC = () => {
           (data.user?.user_metadata?.name as string | undefined) ||
           trimmedEmail.split('@')[0] ||
           'Traveler';
-        loginUser(trimmedEmail, role, derivedName, 'United Kingdom', password);
+        loginUser(trimmedEmail, role, derivedName, 'United Kingdom', undefined, data.user?.id);
         if (window.location.pathname !== '/') {
           window.history.pushState(null, '', '/');
         }

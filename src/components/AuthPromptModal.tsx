@@ -156,7 +156,7 @@ export const AuthPromptModal: React.FC = () => {
           (data.user?.user_metadata?.name as string | undefined) ||
           trimmedEmail.split('@')[0] ||
           'Traveler';
-        loginUser(trimmedEmail, role, derivedName, 'United Kingdom', password);
+        loginUser(trimmedEmail, role, derivedName, 'United Kingdom', undefined, data.user?.id);
         closeAuthPrompt();
         if (window.location.pathname !== '/') {
           window.history.pushState(null, '', '/');
