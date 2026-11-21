@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { IMAGES } from '../assets/images';
 import { BLOG_CATEGORIES } from '../data/seedData';
 import { BlogCategory } from '../types';
 import { Compass, Clock, Check, ArrowRight, Building2, Trees, Home as HomeIcon, MapPin, Unlock } from 'lucide-react';
@@ -21,10 +20,6 @@ const HERO_SLIDES = [
   {
     src: 'https://zzsxyuojnkxfedjecfha.supabase.co/storage/v1/object/public/website%20direct%20uploads/Untitled-2.png',
     alt: 'Kenya safari wildlife and landscape showcase 4',
-  },
-  {
-    src: IMAGES.heroSafari,
-    alt: 'Golden hour safari landscape in Kenya',
   },
 ];
 
