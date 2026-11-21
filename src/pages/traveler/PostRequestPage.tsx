@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { TravelCategory, Currency } from '../../types';
 import { ALL_COUNTRIES } from '../../data/countries';
-import { Compass, Lock, Mail, MessageCircle, PhoneCall, ArrowRight, AlertCircle, Check } from 'lucide-react';
+import { supabase } from '../../supabaseClient';
+import { Compass, Lock, Mail, MessageCircle, PhoneCall, ArrowRight, AlertCircle, Check, CheckCircle2 } from 'lucide-react';
 
 export const PostRequestPage: React.FC = () => {
-  const { currentUser, createTravelRequest, setActiveTab, tabParam, openAuthPrompt } = useApp();
+  const { currentUser, refreshData, setActiveTab, tabParam, openAuthPrompt } = useApp();
 
   // Category (can be prefilled via tabParam)
   const initialCategory: TravelCategory =
@@ -29,9 +30,9 @@ export const PostRequestPage: React.FC = () => {
   const [notes, setNotes] = useState('');
 
   // Contact fields (WhatsApp, Call number, Email address)
-  const [whatsappNumber, setWhatsappNumber] = useState(currentUser?.phone || '+44 7700 900123');
-  const [callNumber, setCallNumber] = useState(currentUser?.phone || '+44 7700 900123');
-  const [emailAddress, setEmailAddress] = useState(currentUser?.email || 'traveler@example.com');
+  const [whatsappNumber, setWhatsappNumber] = useState(currentUser?.phone || '');
+  const [callNumber, setCallNumber] = useState(currentUser?.phone || '');
+  const [emailAddress, setEmailAddress] = useState(currentUser?.email || '');
   const [preferredContactMethods, setPreferredContactMethods] = useState<('whatsapp' | 'email' | 'phone')[]>(['whatsapp']);
   const [sameAsWhatsapp, setSameAsWhatsapp] = useState(true);
 
@@ -81,10 +82,12 @@ export const PostRequestPage: React.FC = () => {
   };
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
+    setSuccessMessage(null);
 
     const trimmedCountry = countryOfOrigin.trim();
     if (!trimmedCountry) {
@@ -92,7 +95,8 @@ export const PostRequestPage: React.FC = () => {
       return;
     }
 
-    if (!budget || Number(budget) <= 0) {
+    const budget_usd = Number(budget);
+    if (!budget_usd || Number.isNaN(budget_usd) || budget_usd <= 0) {
       setFormError('Please enter a required Budget (USD) greater than 0.');
       return;
     }
@@ -102,14 +106,14 @@ export const PostRequestPage: React.FC = () => {
       return;
     }
 
-    let defaultTitle = title.trim();
-    if (!defaultTitle) {
+    let resolvedTitle = title.trim();
+    if (!resolvedTitle) {
       if (category === 'safari') {
-        defaultTitle = `${safariDays}-Day Safari in ${selectedParks.slice(0, 2).join(' & ')}`;
+        resolvedTitle = `${safariDays}-Day Safari in ${selectedParks.slice(0, 2).join(' & ')}`;
       } else if (category === 'hotel') {
-        defaultTitle = `${hotelStarRating} Stay in ${hotelDestination}`;
+        resolvedTitle = `${hotelStarRating} Stay in ${hotelDestination}`;
       } else {
-        defaultTitle = `${bnbBedrooms}-Bed ${bnbPlaceType === 'entire_place' ? 'Entire Villa/Cottage' : 'Private Room'} in ${bnbNeighbourhood}`;
+        resolvedTitle = `${bnbBedrooms}-Bed ${bnbPlaceType === 'entire_place' ? 'Entire Villa/Cottage' : 'Private Room'} in ${bnbNeighbourhood}`;
       }
     }
 
@@ -120,68 +124,61 @@ export const PostRequestPage: React.FC = () => {
           ? hotelDestination.trim()
           : bnbNeighbourhood.trim();
 
+    const cleanNotes =
+      notes.trim() || 'Looking forward to receiving competitive quotes from verified Kenyan operators.';
+    const description = `Country of Origin: ${trimmedCountry}\n\n${cleanNotes}`;
+    const email = emailAddress.trim();
+    const whatsapp = whatsappNumber.trim();
+    const phone = (sameAsWhatsapp ? whatsappNumber : callNumber).trim();
+
     setIsSubmitting(true);
-    const result = await createTravelRequest({
-      category,
-      title: defaultTitle,
-      destination,
-      traveler_country: trimmedCountry,
-      start_date: startDate,
-      end_date: endDate,
-      flexible_month: flexibleMonth || undefined,
-      adults,
-      children,
-      budget: Number(budget),
-      budget_usd: Number(budget),
-      currency: 'USD',
-      notes: notes || 'Looking forward to receiving competitive quotes from verified Kenyan operators.',
-      whatsapp_number: whatsappNumber.trim(),
-      call_number: (sameAsWhatsapp ? whatsappNumber : callNumber).trim(),
-      email_address: emailAddress.trim(),
-      preferred_contact_method: preferredContactMethods[0] || 'whatsapp',
-      preferred_contact_methods: preferredContactMethods,
-      safari_details:
-        category === 'safari'
-          ? {
-              days: safariDays,
-              parks: selectedParks,
-              activities: selectedActivities,
-              accommodation_level: accommodationLevel,
-              airport_pickup: airportPickup,
-              vehicle_type: vehicleType,
-            }
-          : undefined,
-      hotel_details:
-        category === 'hotel'
-          ? {
-              destination: hotelDestination,
-              rooms: hotelRooms,
-              room_type: hotelRoomType,
-              star_rating: hotelStarRating,
-              meal_plan: hotelMealPlan,
-              amenities: hotelAmenities,
-            }
-          : undefined,
-      bnb_details:
-        category === 'bnb'
-          ? {
-              neighbourhood: bnbNeighbourhood,
-              bedrooms: bnbBedrooms,
-              place_type: bnbPlaceType,
-              amenities: bnbAmenities,
-              self_check_in: bnbSelfCheckIn,
-            }
-          : undefined,
-    });
-    setIsSubmitting(false);
+    try {
+      const { data: req, error } = await supabase
+        .from('requests')
+        .insert({
+          category,
+          title: resolvedTitle,
+          description,
+          destination,
+          start_date: startDate,
+          end_date: endDate,
+          adults: Number(adults),
+          children: Number(children),
+          budget_usd,
+        })
+        .select()
+        .single();
 
-    if (!result.success || !result.id) {
-      setFormError(result.error || 'Failed to publish travel request.');
-      return;
+      if (error || !req) {
+        setFormError(error?.message || 'Failed to save travel request in Supabase.');
+        return;
+      }
+
+      const { error: e2 } = await supabase
+        .from('request_contacts')
+        .insert({
+          request_id: req.id,
+          email,
+          whatsapp,
+          phone,
+        });
+
+      if (e2) {
+        setFormError(e2.message);
+        return;
+      }
+
+      // Only show "Request posted" after BOTH inserts succeed
+      setSuccessMessage('Request posted');
+      await refreshData();
+      setTimeout(() => {
+        setActiveTab('traveler-my-requests');
+      }, 1000);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // Navigate to request detail
-    setActiveTab('traveler-request-detail', result.id);
   };
 
   if (!currentUser) {
@@ -226,9 +223,16 @@ export const PostRequestPage: React.FC = () => {
 
       <form onSubmit={handleSubmit} className="space-y-8 bg-white rounded-xl border border-stone-200 p-6 sm:p-8 shadow-xs">
         {formError && (
-          <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2">
+          <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2" role="alert">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>{formError}</span>
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-[#1E5B43] text-xs font-semibold flex items-center gap-2" role="status">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{successMessage}</span>
           </div>
         )}
 

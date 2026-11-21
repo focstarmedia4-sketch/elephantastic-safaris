@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { TravelRequest, Currency, Operator } from '../../types';
+import { supabase } from '../../supabaseClient';
+import { mapRequestRow } from '../../services/supabaseData';
 import {
   Compass,
   Clock,
@@ -40,7 +42,6 @@ import { parseBidMessages } from '../../utils/bidFollowUps';
 export const MyRequestsPage: React.FC = () => {
   const {
     currentUser,
-    requests,
     bids,
     unlocks,
     operators,
@@ -92,12 +93,38 @@ export const MyRequestsPage: React.FC = () => {
 
   // Server error or success banner
   const [serverNotice, setServerNotice] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
+  const [supabaseLoadError, setSupabaseLoadError] = useState<string | null>(null);
+  const [isLoadingRequests, setIsLoadingRequests] = useState<boolean>(true);
+  const [loadedRequests, setLoadedRequests] = useState<TravelRequest[]>([]);
+
+  // Load the traveller's requests directly from Supabase on every page load
+  const loadTravellerRequestsFromDb = useCallback(async () => {
+    setIsLoadingRequests(true);
+    setSupabaseLoadError(null);
+    const { data, error } = await supabase
+      .from('requests')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      setSupabaseLoadError(error.message);
+      setLoadedRequests([]);
+    } else {
+      const mapped = (data || []).map(mapRequestRow);
+      setLoadedRequests(
+        currentUser?.id ? mapped.filter((r) => r.traveler_id === currentUser.id) : mapped
+      );
+    }
+    setIsLoadingRequests(false);
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    void loadTravellerRequestsFromDb();
+  }, [loadTravellerRequestsFromDb]);
 
   // Filter requests belonging to current logged-in traveller (strictly from Supabase)
   const travelerId = currentUser?.id || '';
-  const myRequests = currentUser
-    ? requests.filter((r) => r.traveler_id === currentUser.id)
-    : [];
+  const myRequests = loadedRequests;
 
   // Notifications: in-platform alerts when an operator unlocks contact details
   const unlockNotifications = getTravelerUnlockNotifications(travelerId);
@@ -128,6 +155,7 @@ export const MyRequestsPage: React.FC = () => {
     if (!unlocksConfirm) return;
     const res = await addRequestUnlocks(unlocksConfirm.req.id, unlocksConfirm.add);
     if (res.success) {
+      await loadTravellerRequestsFromDb();
       setServerNotice({
         type: 'success',
         text: `Successfully increased unlock limit from ${unlocksConfirm.req.unlock_limit || 30} to ${(unlocksConfirm.req.unlock_limit || 30) + unlocksConfirm.add}.`,
@@ -144,6 +172,7 @@ export const MyRequestsPage: React.FC = () => {
     const nextState = !req.unlocks_enabled;
     const res = await toggleRequestUnlocks(req.id);
     if (res.success) {
+      await loadTravellerRequestsFromDb();
       setServerNotice({
         type: 'success',
         text: nextState
@@ -161,6 +190,7 @@ export const MyRequestsPage: React.FC = () => {
     if (!timeConfirm) return;
     const res = await extendRequestTime(timeConfirm.req.id, timeConfirm.addDays);
     if (res.success) {
+      await loadTravellerRequestsFromDb();
       setServerNotice({
         type: 'success',
         text: `Enquiry extended by +${timeConfirm.addDays} days.`,
@@ -177,6 +207,7 @@ export const MyRequestsPage: React.FC = () => {
     if (!closeConfirm) return;
     const res = await closeRequestEarly(closeConfirm.id);
     if (res.success) {
+      await loadTravellerRequestsFromDb();
       setServerNotice({
         type: 'success',
         text: 'Enquiry closed. Operators will no longer be able to bid or unlock your contact. You can still see all bids.',
@@ -193,6 +224,7 @@ export const MyRequestsPage: React.FC = () => {
     if (!reopenConfirm) return;
     const res = await reopenRequest(reopenConfirm.id);
     if (res.success) {
+      await loadTravellerRequestsFromDb();
       setServerNotice({
         type: 'success',
         text: 'Enquiry reopened. Verified operators can resume submitting bids and unlocking contact.',
@@ -220,6 +252,7 @@ export const MyRequestsPage: React.FC = () => {
       notes: editNotes.trim(),
     });
     if (res.success) {
+      await loadTravellerRequestsFromDb();
       setServerNotice({ type: 'success', text: 'Listing details updated successfully.' });
       setEditReq(null);
     } else {
@@ -242,6 +275,7 @@ export const MyRequestsPage: React.FC = () => {
     if (!bookingModalReq || !selectedBookedOperatorId) return;
     const res = await markRequestBooked(bookingModalReq.id, selectedBookedOperatorId);
     if (res.success) {
+      await loadTravellerRequestsFromDb();
       const bookedOp = operators.find((o) => o.id === selectedBookedOperatorId);
       setBookingModalReq(null);
       if (bookedOp) {
@@ -280,13 +314,30 @@ export const MyRequestsPage: React.FC = () => {
   return (
     <div className="bg-[#F6F4EE] min-h-screen py-10 px-4 sm:px-6 lg:px-8 font-sans text-stone-900">
       <div className="max-w-6xl mx-auto space-y-8">
+        {/* Supabase Load Error Banner */}
+        {supabaseLoadError && (
+          <div className="p-4 rounded-2xl border border-red-300 bg-red-50 text-red-800 text-xs flex items-center justify-between shadow-xs" role="alert">
+            <div className="flex items-center gap-2 font-medium">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+              <span>Supabase error loading requests: {supabaseLoadError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadTravellerRequestsFromDb()}
+              className="text-xs font-bold underline hover:opacity-80 ml-4 shrink-0 min-h-[32px] px-2 cursor-pointer"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* Server Notification Banner */}
         {serverNotice && (
           <div
             className={`p-4 rounded-2xl border text-xs flex items-center justify-between shadow-xs transition-all ${
               serverNotice.type === 'success'
                 ? 'bg-emerald-50 border-emerald-200 text-[#1E5B43]'
-                : 'bg-amber-50 border-amber-200 text-amber-900'
+                : 'bg-red-50 border-red-200 text-red-800'
             }`}
           >
             <div className="flex items-center gap-2 font-medium">
@@ -479,7 +530,14 @@ export const MyRequestsPage: React.FC = () => {
         </div>
 
         {/* Request Cards List */}
-        {displayedRequests.length === 0 ? (
+        {isLoadingRequests ? (
+          <div className="bg-white rounded-2xl border border-[#E2DED3] p-12 text-center space-y-3 shadow-xs">
+            <div className="w-10 h-10 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto text-[#1E5B43]">
+              <RefreshCw className="w-5 h-5 animate-spin" />
+            </div>
+            <p className="text-xs font-semibold text-stone-600">Loading your travel requests from Supabase...</p>
+          </div>
+        ) : displayedRequests.length === 0 ? (
           /* Empty State: "Post your first request. It's free." */
           <div className="bg-white rounded-2xl border border-[#E2DED3] p-12 text-center space-y-4 shadow-xs">
             <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto text-[#1E5B43]">
@@ -1438,6 +1496,11 @@ export const MyRequestsPage: React.FC = () => {
           setRepostData(null);
         }}
         prefillRequest={repostData}
+        onSuccess={(msg) => {
+          setServerNotice({ type: 'success', text: msg });
+          void loadTravellerRequestsFromDb();
+          setTimeout(() => setServerNotice(null), 6000);
+        }}
       />
     </div>
   );

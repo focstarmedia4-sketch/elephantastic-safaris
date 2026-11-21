@@ -1,20 +1,24 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { TravelCategory, Currency } from '../types';
-import { Trees, Building2, Home as HomeIcon, X, Check, Shield, AlertCircle, Compass, MessageCircle, PhoneCall, Mail, Lock } from 'lucide-react';
+import { ALL_COUNTRIES } from '../data/countries';
+import { supabase } from '../supabaseClient';
+import { Trees, Building2, Home as HomeIcon, X, Check, CheckCircle2, Shield, AlertCircle, Compass, MessageCircle, PhoneCall, Mail, Lock } from 'lucide-react';
 
 interface PostRequestModalProps {
   isOpen: boolean;
   onClose: () => void;
   prefillRequest?: any;
+  onSuccess?: (message: string) => void;
 }
 
 export const PostRequestModal: React.FC<PostRequestModalProps> = ({
   isOpen,
   onClose,
   prefillRequest,
+  onSuccess,
 }) => {
-  const { currentUser, createTravelRequest } = useApp();
+  const { currentUser, refreshData } = useApp();
 
   const [category, setCategory] = useState<TravelCategory>(
     prefillRequest?.category || 'safari'
@@ -22,6 +26,14 @@ export const PostRequestModal: React.FC<PostRequestModalProps> = ({
 
   // Common fields
   const [title, setTitle] = useState(prefillRequest?.title || '');
+  const [countryOfOrigin, setCountryOfOrigin] = useState(
+    (prefillRequest?.traveler_country && ALL_COUNTRIES.includes(prefillRequest.traveler_country)
+      ? prefillRequest.traveler_country
+      : '') ||
+      (currentUser?.country && ALL_COUNTRIES.includes(currentUser.country)
+        ? currentUser.country
+        : '')
+  );
   const [startDate, setStartDate] = useState(prefillRequest?.start_date || '2026-12-15');
   const [endDate, setEndDate] = useState(prefillRequest?.end_date || '2026-12-22');
   const [flexibleMonth, setFlexibleMonth] = useState(prefillRequest?.flexible_month || '');
@@ -35,13 +47,13 @@ export const PostRequestModal: React.FC<PostRequestModalProps> = ({
 
   // Contact fields (WhatsApp number, Call number, Email address)
   const [whatsappNumber, setWhatsappNumber] = useState(
-    prefillRequest?.whatsapp_number || currentUser?.phone || '+44 7700 900123'
+    prefillRequest?.whatsapp_number || currentUser?.phone || ''
   );
   const [callNumber, setCallNumber] = useState(
-    prefillRequest?.call_number || currentUser?.phone || '+44 7700 900123'
+    prefillRequest?.call_number || currentUser?.phone || ''
   );
   const [emailAddress, setEmailAddress] = useState(
-    prefillRequest?.email_address || currentUser?.email || 'traveler@example.com'
+    prefillRequest?.email_address || currentUser?.email || ''
   );
   const [preferredContactMethod, setPreferredContactMethod] = useState<'whatsapp' | 'email' | 'phone'>(
     prefillRequest?.preferred_contact_method || 'whatsapp'
@@ -99,8 +111,9 @@ export const PostRequestModal: React.FC<PostRequestModalProps> = ({
     prefillRequest?.bnb_details?.self_check_in ?? true
   );
 
-  // Validation errors
+  // Validation errors & status
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
@@ -111,6 +124,10 @@ export const PostRequestModal: React.FC<PostRequestModalProps> = ({
       errs.title = 'Please enter a title describing your trip request.';
     } else if (title.trim().length < 5) {
       errs.title = 'Title must be at least 5 characters long.';
+    }
+
+    if (!countryOfOrigin.trim()) {
+      errs.country = 'Please select your country of origin.';
     }
 
     if (!startDate) {
@@ -173,9 +190,11 @@ export const PostRequestModal: React.FC<PostRequestModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSuccessMessage(null);
     if (!validate()) return;
 
     setIsSubmitting(true);
+    setErrors((prev) => ({ ...prev, submit: '' }));
 
     const destination =
       category === 'safari'
@@ -184,60 +203,62 @@ export const PostRequestModal: React.FC<PostRequestModalProps> = ({
           ? hotelDestination.trim()
           : bnbNeighbourhood.trim();
 
-    const payload: any = {
-      category,
-      title: title.trim(),
-      destination,
-      start_date: startDate,
-      end_date: endDate,
-      flexible_month: flexibleMonth || undefined,
-      adults: Number(adults),
-      children: Number(children),
-      budget: Number(budget),
-      budget_usd: Number(budget),
-      currency: 'USD',
-      notes: notes.trim() || 'No additional notes provided.',
-      whatsapp_number: whatsappNumber.trim(),
-      call_number: (sameAsWhatsapp ? whatsappNumber : callNumber).trim(),
-      email_address: emailAddress.trim(),
-      preferred_contact_method: preferredContactMethod,
-    };
+    const cleanNotes = notes.trim() || 'No additional notes provided.';
+    const description = `Country of Origin: ${countryOfOrigin.trim()}\n\n${cleanNotes}`;
+    const budget_usd = Number(budget);
+    const email = emailAddress.trim();
+    const whatsapp = whatsappNumber.trim();
+    const phone = (sameAsWhatsapp ? whatsappNumber : callNumber).trim();
 
-    if (category === 'safari') {
-      payload.safari_details = {
-        days: safariDays,
-        parks: selectedParks,
-        activities: selectedActivities,
-        accommodation_level: accommodationLevel,
-        airport_pickup: airportPickup,
-        vehicle_type: vehicleType,
-      };
-    } else if (category === 'hotel') {
-      payload.hotel_details = {
-        destination: hotelDestination,
-        rooms: hotelRooms,
-        room_type: hotelRoomType,
-        star_rating: hotelStarRating,
-        meal_plan: hotelMealPlan,
-        amenities: hotelAmenities,
-      };
-    } else if (category === 'bnb') {
-      payload.bnb_details = {
-        neighbourhood: bnbNeighbourhood,
-        bedrooms: bnbBedrooms,
-        place_type: bnbPlaceType,
-        amenities: bnbAmenities,
-        self_check_in: selfCheckIn,
-      };
-    }
+    try {
+      const { data: req, error } = await supabase
+        .from('requests')
+        .insert({
+          category,
+          title: title.trim(),
+          description,
+          destination,
+          start_date: startDate,
+          end_date: endDate,
+          adults: Number(adults),
+          children: Number(children),
+          budget_usd,
+        })
+        .select()
+        .single();
 
-    const res = await createTravelRequest(payload);
-    setIsSubmitting(false);
-    if (!res.success) {
-      setErrors({ submit: res.error || 'Failed to create request in Supabase.' });
-      return;
+      if (error || !req) {
+        setErrors({ submit: error?.message || 'Failed to insert travel request in Supabase.' });
+        return;
+      }
+
+      const { error: e2 } = await supabase
+        .from('request_contacts')
+        .insert({
+          request_id: req.id,
+          email,
+          whatsapp,
+          phone,
+        });
+
+      if (e2) {
+        setErrors({ submit: e2.message });
+        return;
+      }
+
+      // Only show "Request posted" after BOTH inserts succeed
+      setSuccessMessage('Request posted');
+      await refreshData();
+      onSuccess?.('Request posted');
+      setTimeout(() => {
+        setSuccessMessage(null);
+        onClose();
+      }, 600);
+    } catch (err) {
+      setErrors({ submit: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setIsSubmitting(false);
     }
-    onClose();
   };
 
   return (
@@ -317,27 +338,58 @@ export const PostRequestModal: React.FC<PostRequestModalProps> = ({
 
           {/* Common Fields */}
           <div className="space-y-4 pt-2">
-            <div>
-              <label className="block text-xs font-bold text-[#2F4858] mb-1">
-                Trip Request Title *
-              </label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => {
-                  setTitle(e.target.value);
-                  if (errors.title) setErrors((prev) => ({ ...prev, title: '' }));
-                }}
-                className={`w-full text-sm rounded-xl border px-3.5 py-2.5 bg-white text-[#2F4858] outline-hidden min-h-[44px] font-medium ${
-                  errors.title ? 'border-red-500 ring-1 ring-red-500' : 'border-[#E2DED3] focus:border-[#1E5B43]'
-                }`}
-                placeholder="e.g. 7-Day Maasai Mara Migration Safari for Couple with Balloon Ride"
-              />
-              {errors.title && (
-                <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                  <AlertCircle className="w-3.5 h-3.5" /> {errors.title}
-                </p>
-              )}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-bold text-[#2F4858] mb-1">
+                  Trip Request Title *
+                </label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => {
+                    setTitle(e.target.value);
+                    if (errors.title) setErrors((prev) => ({ ...prev, title: '' }));
+                  }}
+                  className={`w-full text-sm rounded-xl border px-3.5 py-2.5 bg-white text-[#2F4858] outline-hidden min-h-[44px] font-medium ${
+                    errors.title ? 'border-red-500 ring-1 ring-red-500' : 'border-[#E2DED3] focus:border-[#1E5B43]'
+                  }`}
+                  placeholder="e.g. 7-Day Maasai Mara Migration Safari for Couple with Balloon Ride"
+                />
+                {errors.title && (
+                  <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" /> {errors.title}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#2F4858] mb-1">
+                  Country of Origin *
+                </label>
+                <select
+                  required
+                  value={countryOfOrigin}
+                  onChange={(e) => {
+                    setCountryOfOrigin(e.target.value);
+                    if (errors.country) setErrors((prev) => ({ ...prev, country: '' }));
+                  }}
+                  className={`w-full text-sm rounded-xl border px-3.5 py-2.5 bg-white text-[#2F4858] outline-hidden min-h-[44px] font-medium ${
+                    errors.country ? 'border-red-500 ring-1 ring-red-500' : 'border-[#E2DED3] focus:border-[#1E5B43]'
+                  }`}
+                >
+                  <option value="">Select country...</option>
+                  {ALL_COUNTRIES.map((country) => (
+                    <option key={country} value={country}>
+                      {country}
+                    </option>
+                  ))}
+                </select>
+                {errors.country && (
+                  <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" /> {errors.country}
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Travel Dates */}
@@ -878,6 +930,20 @@ export const PostRequestModal: React.FC<PostRequestModalProps> = ({
               <li>Your contact info is completely hidden. Only you choose whom to talk to.</li>
             </ul>
           </div>
+
+          {errors.submit && (
+            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2" role="alert">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{errors.submit}</span>
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-[#1E5B43] text-xs font-semibold flex items-center gap-2" role="status">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{successMessage}</span>
+            </div>
+          )}
 
           {/* Footer Submit Buttons */}
           <div className="pt-4 border-t border-[#E2DED3] flex items-center justify-between">

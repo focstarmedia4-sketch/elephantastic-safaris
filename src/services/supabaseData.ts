@@ -117,19 +117,24 @@ function mapOperatorProfileRow(row: any): Operator {
   };
 }
 
-function mapRequestRow(row: any): TravelRequest {
+export function mapRequestRow(row: any): TravelRequest {
   const budgetUsd = Number(row.budget_usd ?? 0);
   const unlockLimit = Number(row.unlock_limit ?? 30);
   const unlockingEnabled = row.unlocking_enabled !== false;
   const destination = row.destination || '';
-  const description = row.description || '';
+  const rawDescription = String(row.description || '');
+  const originMatch = rawDescription.match(/^Country of Origin:\s*([^\n]+)\n*/i);
+  const parsedOriginCountry = originMatch ? originMatch[1].trim() : '';
+  const description = originMatch
+    ? rawDescription.slice(originMatch[0].length).trim()
+    : rawDescription;
   const category = (['safari', 'hotel', 'bnb'].includes(row.category) ? row.category : 'safari') as TravelCategory;
 
   return {
     id: String(row.id),
     traveler_id: String(row.traveller_id || ''),
     traveler_name: 'Traveller',
-    traveler_country: destination || 'Kenya',
+    traveler_country: parsedOriginCountry || destination || 'Kenya',
     category,
     title: row.title || '',
     start_date: row.start_date || '',
@@ -338,10 +343,8 @@ export async function loadPublicSupabaseData(): Promise<{
   const [requestsRes, settingsRes] = await Promise.all([
     supabase
       .from('requests')
-      .select(
-        'id, traveller_id, category, title, description, destination, start_date, end_date, adults, children, budget_usd, status, unlocking_enabled, unlock_limit, expires_at'
-      )
-      .order('start_date', { ascending: false }),
+      .select('*')
+      .order('created_at', { ascending: false }),
     supabase.from('settings').select('key, value'),
   ]);
 
@@ -427,19 +430,10 @@ export async function loadAuthenticatedSupabaseState(
   const role = profile?.role || 'traveler';
 
   // 2. Load role-appropriate data + shared read-only tables in parallel
-  const requestsQuery =
-    role === 'traveler'
-      ? supabase
-          .from('requests')
-          .select(
-            'id, traveller_id, category, title, description, destination, start_date, end_date, adults, children, budget_usd, status, unlocking_enabled, unlock_limit, expires_at'
-          )
-          .eq('traveller_id', authUserId)
-      : supabase
-          .from('requests')
-          .select(
-            'id, traveller_id, category, title, description, destination, start_date, end_date, adults, children, budget_usd, status, unlocking_enabled, unlock_limit, expires_at'
-          );
+  const requestsQuery = supabase
+    .from('requests')
+    .select('*')
+    .order('created_at', { ascending: false });
 
   const [
     requestsRes,
@@ -613,53 +607,62 @@ export async function createRequestWithContactsInDb(params: {
   whatsapp: string;
   phone: string;
 }): Promise<SupabaseResult<TravelRequest>> {
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const {
+    category,
+    title,
+    description,
+    destination,
+    start_date,
+    end_date,
+    adults,
+    children,
+    budget_usd,
+    email,
+    whatsapp,
+    phone,
+  } = params;
 
-  const { data: insertedRequest, error: requestError } = await supabase
+  const { data: req, error } = await supabase
     .from('requests')
     .insert({
-      category: params.category,
-      title: params.title,
-      description: params.description,
-      destination: params.destination,
-      start_date: params.start_date,
-      end_date: params.end_date,
-      adults: params.adults,
-      children: params.children,
-      budget_usd: params.budget_usd,
-      status: 'open',
-      unlocking_enabled: true,
-      unlock_limit: 30,
-      expires_at: expiresAt,
+      category,
+      title,
+      description,
+      destination,
+      start_date,
+      end_date,
+      adults,
+      children,
+      budget_usd,
     })
-    .select(
-      'id, traveller_id, category, title, description, destination, start_date, end_date, adults, children, budget_usd, status, unlocking_enabled, unlock_limit, expires_at'
-    )
+    .select()
     .single();
 
-  if (requestError || !insertedRequest) {
+  if (error || !req) {
     return {
       data: null,
-      error: formatSupabaseError('insert requests', requestError),
+      error: error?.message || 'Failed to insert travel request into Supabase.',
     };
   }
 
-  const { error: contactError } = await supabase.from('request_contacts').insert({
-    request_id: insertedRequest.id,
-    email: params.email,
-    whatsapp: params.whatsapp,
-    phone: params.phone,
-  });
+  const { error: e2 } = await supabase
+    .from('request_contacts')
+    .insert({
+      request_id: req.id,
+      email,
+      whatsapp,
+      phone,
+    });
 
-  if (contactError) {
+  if (e2) {
     return {
-      data: mapRequestRow(insertedRequest),
-      error: formatSupabaseError('insert request_contacts', contactError),
+      data: null,
+      error: e2.message,
     };
   }
 
   return {
-    data: mapRequestRow(insertedRequest),
+    data: mapRequestRow(req),
     error: null,
   };
 }

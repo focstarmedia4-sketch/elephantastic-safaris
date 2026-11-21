@@ -587,10 +587,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     }
 
+    const cleanNotes = (data.notes || '').trim();
+    const countryOrigin = (data.traveler_country || '').trim();
+    const descriptionWithOrigin =
+      countryOrigin && !/^Country of Origin:/i.test(cleanNotes)
+        ? `Country of Origin: ${countryOrigin}${cleanNotes ? `\n\n${cleanNotes}` : ''}`
+        : cleanNotes;
+
     const res = await createRequestWithContactsInDb({
       category: data.category,
       title: data.title.trim(),
-      description: data.notes.trim(),
+      description: descriptionWithOrigin,
       destination,
       start_date: data.start_date,
       end_date: data.end_date,
