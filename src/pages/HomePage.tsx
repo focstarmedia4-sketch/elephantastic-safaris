@@ -143,125 +143,6 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
-      {/* Category Pillars (Safaris, Hotels, BnBs live from Day 1) */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-        <div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-safari-dusk tracking-tight font-display">
-            Covering every dimension of Kenyan travel
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Card 1: Safaris */}
-          <div
-            onClick={() => {
-              if (!currentUser) {
-                openAuthPrompt('traveler', 'traveler-post', 'safari', 'Post Safari Request');
-              } else {
-                setActiveTab('traveler-post', 'safari');
-              }
-            }}
-            className="group cursor-pointer bg-white rounded-xl border border-desert-atlas/30 overflow-hidden hover:border-desert-atlas hover:shadow-lg transition-all"
-          >
-            <div className="aspect-[4/3] overflow-hidden bg-desert-atlas-light">
-              <img
-                src="https://zzsxyuojnkxfedjecfha.supabase.co/storage/v1/object/public/website%20direct%20uploads/istockphoto-2243700096-612x612.jpg"
-                alt="Maasai Mara and Amboseli safari Land Cruiser"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-            <div className="p-5 space-y-2">
-              <div className="flex items-center gap-1.5 text-xs text-mountain-hostel font-semibold uppercase tracking-wider">
-                <Trees className="w-3.5 h-3.5 text-desert-atlas-dark" />
-                Safaris &amp; Guided Tours
-              </div>
-              <h3 className="text-lg font-bold text-safari-dusk group-hover:text-highlight-accent transition-colors font-display">
-                Maasai Mara, Amboseli &amp; Tsavo
-              </h3>
-              <p className="text-xs text-mountain-hostel/80 leading-relaxed">
-                Custom private 4x4 Land Cruisers, silver-guide led game drives, balloon safaris, and migration tracking.
-              </p>
-              <div className="pt-2 text-xs font-semibold text-highlight-accent flex items-center gap-1">
-                Post Safari Request &rarr;
-              </div>
-            </div>
-          </div>
-
-          {/* Card 2: Hotels & Lodges */}
-          <div
-            onClick={() => {
-              if (!currentUser) {
-                openAuthPrompt('traveler', 'traveler-post', 'hotel', 'Post Hotel Request');
-              } else {
-                setActiveTab('traveler-post', 'hotel');
-              }
-            }}
-            className="group cursor-pointer bg-white rounded-xl border border-desert-atlas/30 overflow-hidden hover:border-desert-atlas hover:shadow-lg transition-all"
-          >
-            <div className="aspect-[4/3] overflow-hidden bg-desert-atlas-light">
-              <img
-                src="https://zzsxyuojnkxfedjecfha.supabase.co/storage/v1/object/public/website%20direct%20uploads/The-Safari-Collection-Sasaabs-oasis-gets-rejuvenated-with-the-rain.jpg"
-                alt="Luxury safari lodge terrace overlooking watering hole"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-            <div className="p-5 space-y-2">
-              <div className="flex items-center gap-1.5 text-xs text-mountain-hostel font-semibold uppercase tracking-wider">
-                <Building2 className="w-3.5 h-3.5 text-desert-atlas-dark" />
-                Hotels &amp; Safari Lodges
-              </div>
-              <h3 className="text-lg font-bold text-safari-dusk group-hover:text-highlight-accent transition-colors font-display">
-                City Stays &amp; Wilderness Lodges
-              </h3>
-              <p className="text-xs text-mountain-hostel/80 leading-relaxed">
-                Nairobi business hubs, tented camps in private conservancies, half-board and full-board accommodations.
-              </p>
-              <div className="pt-2 text-xs font-semibold text-highlight-accent flex items-center gap-1">
-                Post Hotel Request &rarr;
-              </div>
-            </div>
-          </div>
-
-          {/* Card 3: BnBs & Cottages */}
-          <div
-            onClick={() => {
-              if (!currentUser) {
-                openAuthPrompt('traveler', 'traveler-post', 'bnb', 'Post BnB Request');
-              } else {
-                setActiveTab('traveler-post', 'bnb');
-              }
-            }}
-            className="group cursor-pointer bg-white rounded-xl border border-desert-atlas/30 overflow-hidden hover:border-desert-atlas hover:shadow-lg transition-all"
-          >
-            <div className="aspect-[4/3] overflow-hidden bg-desert-atlas-light">
-              <img
-                src="https://zzsxyuojnkxfedjecfha.supabase.co/storage/v1/object/public/website%20direct%20uploads/alfajiri-villas=402691-300.jpg"
-                alt="Coastal Swahili beach villa with swimming pool"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-            <div className="p-5 space-y-2">
-              <div className="flex items-center gap-1.5 text-xs text-mountain-hostel font-semibold uppercase tracking-wider">
-                <HomeIcon className="w-3.5 h-3.5 text-desert-atlas-dark" />
-                BnBs, Cottages &amp; Beach Villas
-              </div>
-              <h3 className="text-lg font-bold text-safari-dusk group-hover:text-highlight-accent transition-colors font-display">
-                Diani, Watamu &amp; Lake Naivasha
-              </h3>
-              <p className="text-xs text-mountain-hostel/80 leading-relaxed">
-                Private coastal villas with private chefs, lakeside rustic cottages, Karen farmhouses, and stylish city lofts.
-              </p>
-              <div className="pt-2 text-xs font-semibold text-highlight-accent flex items-center gap-1">
-                Post BnB Request &rarr;
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* Live Marketplace Feed Teaser */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
@@ -464,6 +345,125 @@ export const HomePage: React.FC = () => {
               </div>
             );
           })}
+        </div>
+      </section>
+
+      {/* Category Pillars (Safaris, Hotels, BnBs live from Day 1) */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+        <div>
+          <h2 className="text-2xl sm:text-3xl font-bold text-safari-dusk tracking-tight font-display">
+            Covering every dimension of Kenyan travel
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Card 1: Safaris */}
+          <div
+            onClick={() => {
+              if (!currentUser) {
+                openAuthPrompt('traveler', 'traveler-post', 'safari', 'Post Safari Request');
+              } else {
+                setActiveTab('traveler-post', 'safari');
+              }
+            }}
+            className="group cursor-pointer bg-white rounded-xl border border-desert-atlas/30 overflow-hidden hover:border-desert-atlas hover:shadow-lg transition-all"
+          >
+            <div className="aspect-[4/3] overflow-hidden bg-desert-atlas-light">
+              <img
+                src="https://zzsxyuojnkxfedjecfha.supabase.co/storage/v1/object/public/website%20direct%20uploads/istockphoto-2243700096-612x612.jpg"
+                alt="Maasai Mara and Amboseli safari Land Cruiser"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+            <div className="p-5 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs text-mountain-hostel font-semibold uppercase tracking-wider">
+                <Trees className="w-3.5 h-3.5 text-desert-atlas-dark" />
+                Safaris &amp; Guided Tours
+              </div>
+              <h3 className="text-lg font-bold text-safari-dusk group-hover:text-highlight-accent transition-colors font-display">
+                Maasai Mara, Amboseli &amp; Tsavo
+              </h3>
+              <p className="text-xs text-mountain-hostel/80 leading-relaxed">
+                Custom private 4x4 Land Cruisers, silver-guide led game drives, balloon safaris, and migration tracking.
+              </p>
+              <div className="pt-2 text-xs font-semibold text-highlight-accent flex items-center gap-1">
+                Post Safari Request &rarr;
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2: Hotels & Lodges */}
+          <div
+            onClick={() => {
+              if (!currentUser) {
+                openAuthPrompt('traveler', 'traveler-post', 'hotel', 'Post Hotel Request');
+              } else {
+                setActiveTab('traveler-post', 'hotel');
+              }
+            }}
+            className="group cursor-pointer bg-white rounded-xl border border-desert-atlas/30 overflow-hidden hover:border-desert-atlas hover:shadow-lg transition-all"
+          >
+            <div className="aspect-[4/3] overflow-hidden bg-desert-atlas-light">
+              <img
+                src="https://zzsxyuojnkxfedjecfha.supabase.co/storage/v1/object/public/website%20direct%20uploads/The-Safari-Collection-Sasaabs-oasis-gets-rejuvenated-with-the-rain.jpg"
+                alt="Luxury safari lodge terrace overlooking watering hole"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+            <div className="p-5 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs text-mountain-hostel font-semibold uppercase tracking-wider">
+                <Building2 className="w-3.5 h-3.5 text-desert-atlas-dark" />
+                Hotels &amp; Safari Lodges
+              </div>
+              <h3 className="text-lg font-bold text-safari-dusk group-hover:text-highlight-accent transition-colors font-display">
+                City Stays &amp; Wilderness Lodges
+              </h3>
+              <p className="text-xs text-mountain-hostel/80 leading-relaxed">
+                Nairobi business hubs, tented camps in private conservancies, half-board and full-board accommodations.
+              </p>
+              <div className="pt-2 text-xs font-semibold text-highlight-accent flex items-center gap-1">
+                Post Hotel Request &rarr;
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: BnBs & Cottages */}
+          <div
+            onClick={() => {
+              if (!currentUser) {
+                openAuthPrompt('traveler', 'traveler-post', 'bnb', 'Post BnB Request');
+              } else {
+                setActiveTab('traveler-post', 'bnb');
+              }
+            }}
+            className="group cursor-pointer bg-white rounded-xl border border-desert-atlas/30 overflow-hidden hover:border-desert-atlas hover:shadow-lg transition-all"
+          >
+            <div className="aspect-[4/3] overflow-hidden bg-desert-atlas-light">
+              <img
+                src="https://zzsxyuojnkxfedjecfha.supabase.co/storage/v1/object/public/website%20direct%20uploads/alfajiri-villas=402691-300.jpg"
+                alt="Coastal Swahili beach villa with swimming pool"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+            <div className="p-5 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs text-mountain-hostel font-semibold uppercase tracking-wider">
+                <HomeIcon className="w-3.5 h-3.5 text-desert-atlas-dark" />
+                BnBs, Cottages &amp; Beach Villas
+              </div>
+              <h3 className="text-lg font-bold text-safari-dusk group-hover:text-highlight-accent transition-colors font-display">
+                Diani, Watamu &amp; Lake Naivasha
+              </h3>
+              <p className="text-xs text-mountain-hostel/80 leading-relaxed">
+                Private coastal villas with private chefs, lakeside rustic cottages, Karen farmhouses, and stylish city lofts.
+              </p>
+              <div className="pt-2 text-xs font-semibold text-highlight-accent flex items-center gap-1">
+                Post BnB Request &rarr;
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
