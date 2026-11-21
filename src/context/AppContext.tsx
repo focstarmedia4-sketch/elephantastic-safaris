@@ -35,6 +35,7 @@ import {
   SEED_UNLOCKS,
   SEED_ADMIN_SETTINGS,
 } from '../data/seedData';
+import { IMAGES } from '../assets/images';
 
 interface SlotInfo {
   total: number;
@@ -290,54 +291,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const saved = localStorage.getItem(`${STORAGE_PREFIX}blog_posts_v4`);
     if (!saved) return SEED_BLOG_POSTS;
     const parsed: BlogPost[] = JSON.parse(saved);
-    const updatedBeachImage = SEED_BLOG_POSTS.find((p) => p.id === 'blog_1')?.image_url;
-    const updatedSafariImage = SEED_BLOG_POSTS.find((p) => p.id === 'blog_2')?.image_url;
-    const updatedCuisineImage = SEED_BLOG_POSTS.find((p) => p.id === 'blog_3')?.image_url;
-    const updatedStaysImage = SEED_BLOG_POSTS.find((p) => p.id === 'blog_4')?.image_url;
-    const updatedMigrationImage = SEED_BLOG_POSTS.find((p) => p.id === 'blog_5')?.image_url;
-    const updatedHiddenGemsImage = SEED_BLOG_POSTS.find((p) => p.id === 'blog_6')?.image_url;
+    const seedById = new Map(SEED_BLOG_POSTS.map((p) => [p.id, p]));
+    const legacyAssetMap: Record<string, string> = {
+      'safari_tour_card_1794323355207.jpg': IMAGES.safariTours,
+      'hotel_lodge_card_1794323356040.jpg': IMAGES.hotelLodge,
+      'bnb_villa_card_1794323357592.jpg': IMAGES.bnbVilla,
+      'blog_mara_migration_1794325893622.jpg': IMAGES.blogMara,
+      'blog_diani_dhow_coast_1794325893839.jpg': IMAGES.blogDiani,
+      'blog_mount_kenya_peaks_1794325893931.jpg': IMAGES.blogMountKenya,
+      'blog_bush_camp_1794996241796.jpg': IMAGES.blogBushCamp,
+      'blog_nyama_choma_1794996243727.jpg': IMAGES.blogNyamaChoma,
+      'blog_kenya_guides_1794996242266.jpg': IMAGES.blogKenyaGuides,
+      'blog_hidden_gems_1794996922161.jpg': IMAGES.blogHiddenGems,
+      'blog_kenyan_culture_1794996923091.jpg': IMAGES.blogKenyanCulture,
+      'blog_romantic_kenya_1794996923892.jpg': IMAGES.blogRomanticKenya,
+      'blog_rift_valley_1794996921433.jpg': IMAGES.blogRiftValley,
+    };
+
     return parsed.map((post) => {
-      if (
-        post.id === 'blog_1' &&
-        updatedBeachImage &&
-        post.image_url.includes('blog_diani_dhow_coast_1794325893839.jpg')
-      ) {
-        return { ...post, image_url: updatedBeachImage };
-      }
-      if (
-        post.id === 'blog_2' &&
-        updatedSafariImage &&
-        post.image_url.includes('safari_tour_card_1794323355207.jpg')
-      ) {
-        return { ...post, image_url: updatedSafariImage };
-      }
-      if (
-        post.id === 'blog_3' &&
-        updatedCuisineImage &&
-        post.image_url.includes('blog_nyama_choma_1794996243727.jpg')
-      ) {
-        return { ...post, image_url: updatedCuisineImage };
-      }
-      if (
-        post.id === 'blog_4' &&
-        updatedStaysImage &&
-        post.image_url.includes('blog_bush_camp_1794996241796.jpg')
-      ) {
-        return { ...post, image_url: updatedStaysImage };
-      }
-      if (
-        post.id === 'blog_5' &&
-        updatedMigrationImage &&
-        post.image_url.includes('blog_mara_migration_1794325893622.jpg')
-      ) {
-        return { ...post, image_url: updatedMigrationImage };
-      }
-      if (
-        post.id === 'blog_6' &&
-        updatedHiddenGemsImage &&
-        post.image_url.includes('blog_hidden_gems_1794996922161.jpg')
-      ) {
-        return { ...post, image_url: updatedHiddenGemsImage };
+      if (post.image_url.startsWith('/src/assets/images/')) {
+        const seedMatch = seedById.get(post.id);
+        if (seedMatch) {
+          return { ...post, image_url: seedMatch.image_url };
+        }
+        const filename = post.image_url.split('/').pop() || '';
+        return { ...post, image_url: legacyAssetMap[filename] || IMAGES.blogMara };
       }
       return post;
     });
