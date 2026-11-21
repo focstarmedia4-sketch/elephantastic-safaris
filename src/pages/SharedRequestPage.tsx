@@ -252,15 +252,46 @@ export const SharedRequestPage: React.FC = () => {
 
           {/* Action Buttons */}
           <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <button
-              type="button"
-              onClick={handleRespondAsOperator}
-              className="flex-1 py-3 px-5 rounded-xl bg-[#1E5B43] hover:bg-[#154331] text-white text-xs font-bold transition-colors flex items-center justify-center gap-2 min-h-[44px] cursor-pointer shadow-xs"
-            >
-              <Briefcase className="w-4 h-4 shrink-0" />
-              <span>{currentUser ? 'View Full Details, Bid or Unlock Contact' : 'Kenyan Operator? Sign In to Quote'}</span>
-              <ArrowRight className="w-4 h-4 shrink-0" />
-            </button>
+            {!currentUser ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleRespondAsOperator}
+                  className="flex-1 py-3 px-5 rounded-xl bg-[#1E5B43] hover:bg-[#154331] text-white text-xs font-bold transition-colors flex items-center justify-center gap-2 min-h-[44px] cursor-pointer shadow-xs"
+                >
+                  <Briefcase className="w-4 h-4 shrink-0" />
+                  <span>Log in to bid</span>
+                  <ArrowRight className="w-4 h-4 shrink-0" />
+                </button>
+                {!unlockInfo.bidsOnly && !unlockInfo.isFull && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openAuthPrompt(
+                        'operator',
+                        'operator-request-detail',
+                        request.id,
+                        'Log in to Unlock Traveler Contact'
+                      )
+                    }
+                    className="flex-1 py-3 px-5 rounded-xl bg-desert-atlas-light/70 hover:bg-desert-atlas-light text-safari-dusk border border-desert-atlas/50 text-xs font-bold transition-colors flex items-center justify-center gap-2 min-h-[44px] cursor-pointer shadow-xs"
+                  >
+                    <Unlock className="w-4 h-4 shrink-0 text-[#1E5B43]" />
+                    <span>Log in to unlock</span>
+                  </button>
+                )}
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={handleRespondAsOperator}
+                className="flex-1 py-3 px-5 rounded-xl bg-[#1E5B43] hover:bg-[#154331] text-white text-xs font-bold transition-colors flex items-center justify-center gap-2 min-h-[44px] cursor-pointer shadow-xs"
+              >
+                <Briefcase className="w-4 h-4 shrink-0" />
+                <span>View Full Details, Bid or Unlock Contact</span>
+                <ArrowRight className="w-4 h-4 shrink-0" />
+              </button>
+            )}
 
             <button
               type="button"

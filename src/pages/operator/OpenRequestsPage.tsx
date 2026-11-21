@@ -9,10 +9,12 @@ export const OpenRequestsPage: React.FC = () => {
     requests,
     currentOperator,
     currentUser,
+    isLoadingData,
     isPassActive,
     getPassTimeRemaining,
     getSlotInfo,
     setActiveTab,
+    openAuthPrompt,
     tabParam,
     toggleBookmark,
     isBookmarked,
@@ -97,11 +99,22 @@ export const OpenRequestsPage: React.FC = () => {
             </p>
           </div>
           <button
-            onClick={() => setActiveTab('operator-dashboard')}
+            onClick={() => {
+              if (!currentUser) {
+                openAuthPrompt(
+                  'operator',
+                  'operator-open-requests',
+                  undefined,
+                  'Log in to Bid or Unlock Contacts'
+                );
+              } else {
+                setActiveTab('operator-dashboard');
+              }
+            }}
             className="px-5 py-2.5 text-xs font-bold text-white bg-highlight-accent hover:bg-highlight-accent-hover rounded-xl transition-colors whitespace-nowrap shrink-0 flex items-center gap-2 shadow-xs cursor-pointer min-h-[44px]"
           >
             <CreditCard className="w-4 h-4" />
-            Operator Dashboard
+            {currentUser ? 'Operator Dashboard' : 'Log in to bid'}
           </button>
         </div>
       )}
@@ -174,7 +187,11 @@ export const OpenRequestsPage: React.FC = () => {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setActiveTab('operator-request-detail', req.id);
+                        if (!currentUser) {
+                          setActiveTab('shared-request', req.id);
+                        } else {
+                          setActiveTab('operator-request-detail', req.id);
+                        }
                       }}
                       className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold transition-all cursor-pointer shadow-2xs ${
                         req.status === 'open' && !isLocked
@@ -195,18 +212,20 @@ export const OpenRequestsPage: React.FC = () => {
                     <span className="font-mono tabular-nums">
                       {req.start_date} &rarr; {req.end_date}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => toggleBookmark(req.id)}
-                      className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
-                        isBookmarked(req.id)
-                          ? 'border-[#1E5B43] bg-[#EAE7DD] text-[#1E5B43]'
-                          : 'border-stone-200 text-stone-400 hover:text-stone-700 hover:border-stone-300'
-                      }`}
-                      title={isBookmarked(req.id) ? 'Remove bookmark' : 'Bookmark request'}
-                    >
-                      <BookmarkIcon className={`w-3.5 h-3.5 ${isBookmarked(req.id) ? 'fill-current' : ''}`} />
-                    </button>
+                    {currentUser && (
+                      <button
+                        type="button"
+                        onClick={() => toggleBookmark(req.id)}
+                        className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                          isBookmarked(req.id)
+                            ? 'border-[#1E5B43] bg-[#EAE7DD] text-[#1E5B43]'
+                            : 'border-stone-200 text-stone-400 hover:text-stone-700 hover:border-stone-300'
+                        }`}
+                        title={isBookmarked(req.id) ? 'Remove bookmark' : 'Bookmark request'}
+                      >
+                        <BookmarkIcon className={`w-3.5 h-3.5 ${isBookmarked(req.id) ? 'fill-current' : ''}`} />
+                      </button>
+                    )}
                     <ShareRequestButton request={req} variant="icon" />
                   </div>
                 </div>
@@ -336,6 +355,40 @@ export const OpenRequestsPage: React.FC = () => {
                     <Lock className="w-3.5 h-3.5 text-mountain-hostel/50" />
                     Slot cap reached (30/30)
                   </span>
+                ) : !currentUser ? (
+                  <div className="flex-1 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openAuthPrompt(
+                          'operator',
+                          'operator-request-detail',
+                          req.id,
+                          'Log in to Bid on this Request'
+                        )
+                      }
+                      className="flex-1 py-2.5 px-3 text-xs font-bold text-white bg-[#1E5B43] hover:bg-[#154331] rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer min-h-[44px] whitespace-nowrap"
+                    >
+                      <span>Log in to bid</span>
+                    </button>
+                    {!unlockInfo.bidsOnly && !unlockInfo.isFull && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openAuthPrompt(
+                            'operator',
+                            'operator-request-detail',
+                            req.id,
+                            'Log in to Unlock Traveler Contact'
+                          )
+                        }
+                        className="flex-1 py-2.5 px-3 text-xs font-bold text-safari-dusk bg-white hover:bg-desert-atlas-light/60 border border-desert-atlas/50 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer min-h-[44px] whitespace-nowrap"
+                      >
+                        <Unlock className="w-3.5 h-3.5 text-[#1E5B43] shrink-0" />
+                        <span>Log in to unlock</span>
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   <button
                     onClick={() => setActiveTab('operator-request-detail', req.id)}
@@ -351,6 +404,19 @@ export const OpenRequestsPage: React.FC = () => {
           );
         })}
       </div>
+
+      {filteredRequests.length === 0 && (
+        <div className="bg-white rounded-xl border border-stone-200 p-10 text-center space-y-2">
+          <p className="text-sm font-semibold text-safari-dusk">
+            {isLoadingData ? 'Loading open travel requests...' : 'No open travel requests match your filter.'}
+          </p>
+          {!isLoadingData && (
+            <p className="text-xs text-mountain-hostel/75">
+              Check back soon or try switching the category filter above.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 };

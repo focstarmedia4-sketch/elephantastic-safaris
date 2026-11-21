@@ -289,10 +289,14 @@ export const HomePage: React.FC = () => {
             const isOpen = req.status === 'open' && !slotInfo.isLocked;
 
             const handleCardClick = () => {
-              if (currentUser?.role === 'operator') {
+              if (!currentUser) {
+                setActiveTab('shared-request', req.id);
+              } else if (currentUser.role === 'operator') {
                 setActiveTab('operator-request-detail', req.id);
-              } else {
+              } else if (req.traveler_id === currentUser.id) {
                 setActiveTab('traveler-request-detail', req.id);
+              } else {
+                setActiveTab('shared-request', req.id);
               }
             };
 
@@ -389,33 +393,71 @@ export const HomePage: React.FC = () => {
                   </div>
 
                   <div className="pt-2 flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCardClick();
-                      }}
-                      className={`flex-1 py-2.5 px-3 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs min-h-[44px] ${
-                        isOpen
-                          ? 'bg-[#1E5B43] hover:bg-[#154331] text-white'
-                          : 'bg-stone-600 hover:bg-stone-700 text-white'
-                      }`}
-                    >
-                      {isOpen ? (
-                        <>
-                          <Unlock className="w-3.5 h-3.5 shrink-0 text-emerald-200" />
-                          <span>
-                            {unlockInfo.bidsOnly
-                              ? 'Bids Only · View Details'
-                              : unlockInfo.isFull
-                              ? 'Contacts Full · View Details'
-                              : `Unlock Contact: KSH ${unlockFee.feeKsh.toLocaleString()} · View Details`}
-                          </span>
-                        </>
-                      ) : (
-                        <span>Closed · View Request</span>
-                      )}
-                    </button>
+                    {!currentUser && isOpen ? (
+                      <div className="flex-1 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openAuthPrompt(
+                              'operator',
+                              'operator-request-detail',
+                              req.id,
+                              'Log in to Bid on this Request'
+                            );
+                          }}
+                          className="flex-1 py-2.5 px-3 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs min-h-[44px] bg-[#1E5B43] hover:bg-[#154331] text-white whitespace-nowrap"
+                        >
+                          <span>Log in to bid</span>
+                        </button>
+                        {!unlockInfo.bidsOnly && !unlockInfo.isFull && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openAuthPrompt(
+                                'operator',
+                                'operator-request-detail',
+                                req.id,
+                                'Log in to Unlock Traveler Contact'
+                              );
+                            }}
+                            className="flex-1 py-2.5 px-3 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs min-h-[44px] bg-desert-atlas-light/70 hover:bg-desert-atlas-light text-safari-dusk border border-desert-atlas/40 whitespace-nowrap"
+                          >
+                            <Unlock className="w-3.5 h-3.5 shrink-0 text-[#1E5B43]" />
+                            <span>Log in to unlock</span>
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCardClick();
+                        }}
+                        className={`flex-1 py-2.5 px-3 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs min-h-[44px] ${
+                          isOpen
+                            ? 'bg-[#1E5B43] hover:bg-[#154331] text-white'
+                            : 'bg-stone-600 hover:bg-stone-700 text-white'
+                        }`}
+                      >
+                        {isOpen ? (
+                          <>
+                            <Unlock className="w-3.5 h-3.5 shrink-0 text-emerald-200" />
+                            <span>
+                              {unlockInfo.bidsOnly
+                                ? 'Bids Only · View Details'
+                                : unlockInfo.isFull
+                                ? 'Contacts Full · View Details'
+                                : `Unlock Contact: KSH ${unlockFee.feeKsh.toLocaleString()} · View Details`}
+                            </span>
+                          </>
+                        ) : (
+                          <span>Closed · View Request</span>
+                        )}
+                      </button>
+                    )}
                     <ShareRequestButton request={req} variant="button" className="min-h-[44px] shrink-0" />
                   </div>
                 </div>

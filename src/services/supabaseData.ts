@@ -302,6 +302,13 @@ export async function rpcUnlocksUsed(requestId: string): Promise<SupabaseResult<
 export async function fetchRequestContactFromDb(
   requestId: string
 ): Promise<SupabaseResult<TravelerContact | null>> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) {
+    return { data: null, error: null };
+  }
+
   const { data, error } = await supabase
     .from('request_contacts')
     .select('request_id, email, whatsapp, phone')
@@ -329,7 +336,9 @@ export async function fetchRequestContactFromDb(
 }
 
 /**
- * Load public/open requests and settings when logged out (if RLS allows).
+ * Load public/open requests and settings when logged out.
+ * Uses an explicit column list (never select('*'), never traveller_id)
+ * and never queries request_contacts, bids, or operator_profiles.
  */
 export async function loadPublicSupabaseData(): Promise<{
   requests: TravelRequest[];
@@ -343,14 +352,16 @@ export async function loadPublicSupabaseData(): Promise<{
   const [requestsRes, settingsRes] = await Promise.all([
     supabase
       .from('requests')
-      .select('*')
+      .select(
+        'id,category,title,description,destination,start_date,end_date,adults,children,budget_usd,status,unlocking_enabled,unlock_limit,expires_at,created_at'
+      )
+      .eq('status', 'open')
       .order('created_at', { ascending: false }),
     supabase.from('settings').select('key, value'),
   ]);
 
   if (requestsRes.error) {
-    // Public/anon access might be restricted by RLS; only record if unexpected
-    console.warn('[Supabase] Public requests query:', requestsRes.error.message);
+    errors.push(formatSupabaseError('select requests', requestsRes.error));
   }
   if (settingsRes.error) {
     console.warn('[Supabase] Settings query:', settingsRes.error.message);

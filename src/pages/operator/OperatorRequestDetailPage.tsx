@@ -95,10 +95,10 @@ export const OperatorRequestDetailPage: React.FC = () => {
 
   // Fetch request_contacts (RLS-gated) + unlocks_used & unlock_fee_ksh RPCs when request changes
   useEffect(() => {
-    if (request?.id) {
+    if (currentUser && request?.id) {
       void fetchRequestContactDetails(request.id);
     }
-  }, [request?.id, fetchRequestContactDetails]);
+  }, [currentUser, request?.id, fetchRequestContactDetails]);
 
   // Sync operator contacts if empty
   useEffect(() => {

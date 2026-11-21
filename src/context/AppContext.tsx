@@ -472,6 +472,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setUnlocksUsedByRequestId(pub.unlocksUsedByRequestId);
         setUnlockFeeKshByRequestId(pub.unlockFeeKshByRequestId);
         setAdminSettings(mapSettingsToAdminConfig(pub.settings, SEED_ADMIN_SETTINGS));
+        if (pub.errors.length > 0) {
+          reportError(pub.errors[0]);
+        }
       }
     } catch (err) {
       reportError(err instanceof Error ? err.message : String(err));
@@ -1093,6 +1096,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const fetchRequestContactDetails = useCallback(
     async (requestId: string): Promise<TravelerContact | null> => {
+      if (!currentUser) {
+        return null;
+      }
+
       const [contactRes, usedRes] = await Promise.all([
         fetchRequestContactFromDb(requestId),
         rpcUnlocksUsed(requestId),
@@ -1131,7 +1138,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       return contactRes.data;
     },
-    [reportError, requests]
+    [currentUser, reportError, requests]
   );
 
   // Rule 7: Payments, passes, and unlocks are NOT created by the frontend.

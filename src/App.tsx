@@ -37,7 +37,15 @@ import { ReportsPaymentsPage } from './pages/admin/ReportsPaymentsPage';
 
 import { AlertCircle, X } from 'lucide-react';
 
-const PUBLIC_TABS = new Set(['home', 'how-it-works', 'login', 'blog', 'blog-detail', 'shared-request']);
+const PUBLIC_TABS = new Set([
+  'home',
+  'how-it-works',
+  'login',
+  'blog',
+  'blog-detail',
+  'shared-request',
+  'operator-open-requests',
+]);
 
 const AppContent: React.FC = () => {
   const { activeTab, setActiveTab, supabaseError, clearSupabaseError } = useApp();
