@@ -451,6 +451,103 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  const allUsersRef = React.useRef(allUsers);
+  allUsersRef.current = allUsers;
+
+  useEffect(() => {
+    const syncGoogleSession = (
+      sessionUser: {
+        email?: string;
+        app_metadata?: Record<string, unknown>;
+        user_metadata?: Record<string, unknown>;
+      } | null
+    ) => {
+      if (!sessionUser?.email) return;
+      const provider = sessionUser.app_metadata?.provider;
+      if (provider !== 'google') return;
+
+      const email = sessionUser.email.trim();
+      const storedRole = localStorage.getItem('elephantastic_oauth_role') as UserRole | null;
+      const role: UserRole =
+        storedRole === 'operator' || storedRole === 'traveler' ? storedRole : 'traveler';
+      const displayName =
+        (sessionUser.user_metadata?.full_name as string | undefined) ||
+        (sessionUser.user_metadata?.name as string | undefined) ||
+        email.split('@')[0] ||
+        'Traveler';
+
+      localStorage.setItem('elephantastic_has_registered', 'true');
+      localStorage.removeItem('elephantastic_oauth_role');
+
+      const existing = allUsersRef.current.find(
+        (u) => u.email.toLowerCase() === email.toLowerCase()
+      );
+      if (existing) {
+        setCurrentUserId(existing.id);
+        return;
+      }
+
+      const newId = `user_${Date.now()}`;
+      const newUser: User = {
+        id: newId,
+        email,
+        role,
+        name: displayName,
+        country: role === 'operator' ? 'Kenya' : 'United Kingdom',
+        created_at: new Date().toISOString(),
+      };
+      setAllUsers((prev) =>
+        prev.some((u) => u.email.toLowerCase() === email.toLowerCase()) ? prev : [...prev, newUser]
+      );
+      setCurrentUserId(newId);
+
+      if (role === 'operator') {
+        const newOp: Operator = {
+          id: `op_${Date.now()}`,
+          user_id: newId,
+          business_name: `${displayName} Safaris & Hospitality`,
+          contact_name: displayName,
+          phone: '+254 700 000 000',
+          email,
+          categories: ['safari', 'hotel'],
+          regions: ['Maasai Mara', 'Nairobi'],
+          status: 'approved',
+          is_profile_complete: true,
+          access_expires_at: null,
+          rating: 5.0,
+          review_count: 0,
+          created_at: new Date().toISOString(),
+        };
+        setOperators((prev) =>
+          prev.some((op) => op.email.toLowerCase() === email.toLowerCase()) ? prev : [...prev, newOp]
+        );
+      }
+    };
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        syncGoogleSession(session.user);
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.user?.app_metadata?.provider === 'google') {
+        syncGoogleSession(session.user);
+        setAuthPrompt(null);
+        if (window.location.pathname !== '/') {
+          window.history.pushState(null, '', '/');
+        }
+        setActiveTabState('home');
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
   const logoutUser = () => {
     void supabase.auth.signOut();
     setCurrentUserId(null);
