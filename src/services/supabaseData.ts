@@ -7,554 +7,904 @@ import {
   Bookmark,
   ContactUnlockRecord,
   PaymentRecord,
-  Review,
-  BlogPost,
-  FlaggedReport,
+  TravelerContact,
+  TravelCategory,
+  UserRole,
+  AdminMarketplaceSettings,
 } from '../types';
 
-export interface LoadedSupabaseData {
+export interface SupabaseResult<T = null> {
+  data: T | null;
+  error: string | null;
+}
+
+export interface OperatorPassRecord {
+  id: string;
+  operator_id: string;
+  expires_at: string;
+  created_at?: string;
+}
+
+export interface LoadedSupabaseState {
   profile: User | null;
+  operatorProfile: Operator | null;
   operators: Operator[];
   requests: TravelRequest[];
   bids: Bid[];
-  bookmarks: Bookmark[];
-  unlocks: ContactUnlockRecord[];
+  passes: OperatorPassRecord[];
   payments: PaymentRecord[];
-  reviews: Review[];
-  blogPosts: BlogPost[];
-  reports: FlaggedReport[];
+  unlocks: ContactUnlockRecord[];
+  bookmarks: Bookmark[];
+  requestContactsByRequestId: Record<string, TravelerContact>;
+  unlocksUsedByRequestId: Record<string, number>;
+  unlockFeeKshByRequestId: Record<string, number>;
+  settings: Record<string, unknown>;
+  errors: string[];
+}
+
+function formatSupabaseError(context: string, error: { message?: string; details?: string; hint?: string; code?: string } | null | undefined): string {
+  if (!error) return `${context}: Unknown Supabase error`;
+  const parts = [error.message || 'Unknown error'];
+  if (error.details) parts.push(error.details);
+  if (error.hint) parts.push(`Hint: ${error.hint}`);
+  if (error.code) parts.push(`[${error.code}]`);
+  return `${context}: ${parts.join(' — ')}`;
 }
 
 /**
- * Helper to fetch the current authenticated Supabase user's ID.
+ * Map Supabase `profiles.role` ('traveller' | 'operator' | 'admin') to UI `UserRole` ('traveler' | 'operator' | 'admin').
  */
-export async function getAuthenticatedUserId(): Promise<string | null> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  return session?.user?.id ?? null;
-}
-
-export interface MarketplaceSupabaseData {
-  operators: Operator[];
-  requests: TravelRequest[];
-  reviews: Review[];
-  blogPosts: BlogPost[];
+export function mapDbRoleToUiRole(dbRole: string | null | undefined): UserRole {
+  if (dbRole === 'operator') return 'operator';
+  if (dbRole === 'admin') return 'admin';
+  return 'traveler';
 }
 
 /**
- * LOAD MARKETPLACE: Fetch shared marketplace data (all posted travel requests,
- * operators, reviews, and blog posts) so operators and visitors can view every
- * traveler's posted request across accounts and devices.
+ * Map UI `UserRole` to Supabase `profiles.role` ('traveller' | 'operator').
+ * Rule 1: Never let the user pick admin during sign-up.
  */
-export async function loadMarketplaceData(): Promise<MarketplaceSupabaseData> {
-  const [operatorsRes, requestsRes, reviewsRes, blogPostsRes] = await Promise.all([
-    supabase
-      .from('operators')
-      .select('*')
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('travel_requests')
-      .select('*')
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('reviews')
-      .select('*')
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('blog_posts')
-      .select('*')
-      .order('published_at', { ascending: false }),
-  ]);
+export function mapUiRoleToSignupDbRole(uiRole: UserRole): 'traveller' | 'operator' {
+  return uiRole === 'operator' ? 'operator' : 'traveller';
+}
 
-  const errors = [
-    operatorsRes.error,
-    requestsRes.error,
-    reviewsRes.error,
-    blogPostsRes.error,
-  ].filter(Boolean);
+function mapProfileRow(row: any): User {
+  return {
+    id: row.id,
+    email: row.email || '',
+    role: mapDbRoleToUiRole(row.role),
+    name: row.full_name || row.email?.split('@')[0] || 'User',
+    country: '',
+    preferred_currency: 'USD',
+    created_at: row.created_at || new Date().toISOString(),
+  };
+}
 
-  if (errors.length > 0) {
-    console.warn('[Supabase] Marketplace load warning:', errors[0]?.message);
-  }
+function mapOperatorProfileRow(row: any): Operator {
+  const categories = Array.isArray(row.categories)
+    ? (row.categories.filter((c: string) => ['safari', 'hotel', 'bnb'].includes(c)) as TravelCategory[])
+    : [];
+  const regions = Array.isArray(row.regions)
+    ? row.regions
+    : typeof row.regions === 'string' && row.regions.trim()
+      ? row.regions.split(',').map((r: string) => r.trim()).filter(Boolean)
+      : [];
 
   return {
-    operators: (operatorsRes.data as Operator[] | null) ?? [],
-    requests: (requestsRes.data as TravelRequest[] | null) ?? [],
-    reviews: (reviewsRes.data as Review[] | null) ?? [],
-    blogPosts: (blogPostsRes.data as BlogPost[] | null) ?? [],
+    id: row.user_id,
+    user_id: row.user_id,
+    business_name: row.business_name || '',
+    contact_name: row.contact_person || '',
+    phone: row.phone || '',
+    email: row.email || '',
+    categories,
+    regions,
+    description: row.description || '',
+    licence_number: row.tra_licence_number || '',
+    status: row.verification_requested ? 'approved' : 'approved',
+    is_profile_complete: Boolean(
+      row.business_name?.trim() &&
+        row.contact_person?.trim() &&
+        row.phone?.trim() &&
+        row.email?.trim() &&
+        categories.length > 0
+    ),
+    access_expires_at: null,
+    bidding_pass_expires_at: null,
+    rating: 5.0,
+    review_count: 0,
+    created_at: row.created_at || new Date().toISOString(),
+  };
+}
+
+function mapRequestRow(row: any): TravelRequest {
+  const budgetUsd = Number(row.budget_usd ?? 0);
+  const unlockLimit = Number(row.unlock_limit ?? 30);
+  const unlockingEnabled = row.unlocking_enabled !== false;
+  const destination = row.destination || '';
+  const description = row.description || '';
+  const category = (['safari', 'hotel', 'bnb'].includes(row.category) ? row.category : 'safari') as TravelCategory;
+
+  return {
+    id: String(row.id),
+    traveler_id: String(row.traveller_id || ''),
+    traveler_name: 'Traveller',
+    traveler_country: destination || 'Kenya',
+    category,
+    title: row.title || '',
+    start_date: row.start_date || '',
+    end_date: row.end_date || '',
+    adults: Number(row.adults ?? 1),
+    children: Number(row.children ?? 0),
+    budget: budgetUsd,
+    budget_usd: budgetUsd,
+    currency: 'USD',
+    notes: description,
+    safari_details:
+      category === 'safari' && destination
+        ? {
+            days: Math.max(
+              1,
+              row.start_date && row.end_date
+                ? Math.round(
+                    (new Date(row.end_date).getTime() - new Date(row.start_date).getTime()) /
+                      (1000 * 60 * 60 * 24)
+                  ) || 1
+                : 1
+            ),
+            parks: destination.split(',').map((s: string) => s.trim()).filter(Boolean),
+            activities: [],
+            accommodation_level: 'mid-range',
+            airport_pickup: false,
+            vehicle_type: 'private_4x4',
+          }
+        : undefined,
+    hotel_details:
+      category === 'hotel' && destination
+        ? {
+            destination,
+            rooms: 1,
+            room_type: 'Standard',
+            star_rating: '',
+            meal_plan: 'bed_and_breakfast',
+            amenities: [],
+          }
+        : undefined,
+    bnb_details:
+      category === 'bnb' && destination
+        ? {
+            neighbourhood: destination,
+            bedrooms: 1,
+            place_type: 'entire_place',
+            amenities: [],
+            self_check_in: false,
+          }
+        : undefined,
+    slot_limit: unlockLimit,
+    unlock_limit: unlockLimit,
+    unlocks_enabled: unlockingEnabled,
+    bids_only: !unlockingEnabled,
+    status: row.status === 'closed' ? 'closed' : 'open',
+    expires_at: row.expires_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    created_at: row.created_at || new Date().toISOString(),
+  };
+}
+
+function mapBidRow(row: any, operatorMap: Map<string, Operator>): Bid {
+  const op = operatorMap.get(String(row.operator_id));
+  const rawInclusions = row.inclusions;
+  const inclusions: string[] = Array.isArray(rawInclusions)
+    ? rawInclusions.map(String)
+    : typeof rawInclusions === 'string' && rawInclusions.trim()
+      ? rawInclusions
+          .split('\n')
+          .map((s: string) => s.trim())
+          .filter(Boolean)
+      : [];
+
+  const amountUsd = Number(row.amount_usd ?? 0);
+
+  return {
+    id: String(row.id),
+    request_id: String(row.request_id),
+    operator_id: String(row.operator_id),
+    operator_business_name: op?.business_name || row.operator_profiles?.business_name || 'Verified Operator',
+    operator_rating: op?.rating ?? 5.0,
+    operator_review_count: op?.review_count ?? 0,
+    operator_verified: true,
+    price: amountUsd,
+    amount: amountUsd,
+    currency: 'USD',
+    inclusions,
+    message: row.message || '',
+    valid_until: row.valid_until || '',
+    status: 'sent',
+    created_at: row.created_at || new Date().toISOString(),
+    operator_email: op?.email || row.operator_profiles?.email || undefined,
+    operator_phone: op?.phone || row.operator_profiles?.phone || undefined,
+    operator_whatsapp: op?.phone || row.operator_profiles?.phone || undefined,
+  };
+}
+
+function mapPaymentRow(row: any): PaymentRecord {
+  const amount = Number(row.amount_ksh ?? row.amount ?? 0);
+  return {
+    id: String(row.id),
+    operator_id: String(row.operator_id ?? row.user_id ?? ''),
+    operator_business_name: row.operator_business_name || undefined,
+    type: row.type === 'unlock' ? 'unlock' : 'pass',
+    pass_type: row.type === 'unlock' ? undefined : 'bidding',
+    request_id: row.request_id ? String(row.request_id) : undefined,
+    amount,
+    amount_ksh: amount,
+    currency: row.currency || 'KSH',
+    mpesa_transaction_id: row.mpesa_receipt || row.mpesa_transaction_id || row.reference || String(row.id),
+    phone_number: row.phone || row.phone_number || undefined,
+    status: row.status === 'failed' ? 'failed' : 'completed',
+    paid_at: row.paid_at || row.created_at || new Date().toISOString(),
+    pass_expires_at: row.pass_expires_at || '',
+  };
+}
+
+function mapUnlockRow(row: any): ContactUnlockRecord {
+  return {
+    id: String(row.id ?? `${row.operator_id}_${row.request_id}`),
+    request_id: String(row.request_id),
+    operator_id: String(row.operator_id),
+    tier: row.tier || 'Tier',
+    fee_ksh: Number(row.fee_ksh ?? row.amount_ksh ?? 0),
+    status: row.status === 'failed' ? 'failed' : row.status === 'refunded' ? 'refunded' : 'paid',
+    held_until: row.held_until || row.created_at || new Date().toISOString(),
+    paid_at: row.paid_at || row.created_at || new Date().toISOString(),
+    request_title: row.request_title || '',
+    request_category: (row.request_category || 'safari') as TravelCategory,
+    mpesa_transaction_id: row.mpesa_receipt || row.mpesa_transaction_id || undefined,
   };
 }
 
 /**
- * LOAD: Fetch marketplace listings plus all private rows belonging to the
- * currently authenticated user. RLS enforces ownership on private tables and
- * allows travelers & operators to see shared marketplace requests and bids.
+ * RPC: Unlock fee in KSH for a given budget_usd.
+ * Rule 6: supabase.rpc('unlock_fee_ksh', { p_budget_usd })
  */
-export async function loadUserDatabaseData(authUserId: string): Promise<LoadedSupabaseData> {
+export async function rpcUnlockFeeKsh(budgetUsd: number): Promise<SupabaseResult<number>> {
+  const { data, error } = await supabase.rpc('unlock_fee_ksh', {
+    p_budget_usd: budgetUsd,
+  });
+  if (error) {
+    return { data: null, error: formatSupabaseError('rpc unlock_fee_ksh', error) };
+  }
+  return { data: Number(data ?? 0), error: null };
+}
+
+/**
+ * RPC: Unlocks used for a given request id.
+ * Rule 6: supabase.rpc('unlocks_used', { p_request })
+ */
+export async function rpcUnlocksUsed(requestId: string): Promise<SupabaseResult<number>> {
+  const { data, error } = await supabase.rpc('unlocks_used', {
+    p_request: requestId,
+  });
+  if (error) {
+    return { data: null, error: formatSupabaseError('rpc unlocks_used', error) };
+  }
+  return { data: Number(data ?? 0), error: null };
+}
+
+/**
+ * Fetch contact details for a request from `request_contacts`.
+ * Rule 6: Contact details show ONLY if `request_contacts` returns a row (RLS allows only after paid unlock or for owner).
+ */
+export async function fetchRequestContactFromDb(
+  requestId: string
+): Promise<SupabaseResult<TravelerContact | null>> {
+  const { data, error } = await supabase
+    .from('request_contacts')
+    .select('request_id, email, whatsapp, phone')
+    .eq('request_id', requestId)
+    .maybeSingle();
+
+  if (error) {
+    return { data: null, error: formatSupabaseError('select request_contacts', error) };
+  }
+
+  if (!data) {
+    return { data: null, error: null };
+  }
+
+  return {
+    data: {
+      name: '',
+      email: data.email || '',
+      whatsapp: data.whatsapp || '',
+      phone: data.phone || '',
+      preferred_channel: data.whatsapp ? 'whatsapp' : data.phone ? 'phone' : 'email',
+    },
+    error: null,
+  };
+}
+
+/**
+ * Load public/open requests and settings when logged out (if RLS allows).
+ */
+export async function loadPublicSupabaseData(): Promise<{
+  requests: TravelRequest[];
+  settings: Record<string, unknown>;
+  unlocksUsedByRequestId: Record<string, number>;
+  unlockFeeKshByRequestId: Record<string, number>;
+  errors: string[];
+}> {
+  const errors: string[] = [];
+
+  const [requestsRes, settingsRes] = await Promise.all([
+    supabase
+      .from('requests')
+      .select(
+        'id, traveller_id, category, title, description, destination, start_date, end_date, adults, children, budget_usd, status, unlocking_enabled, unlock_limit, expires_at'
+      )
+      .order('start_date', { ascending: false }),
+    supabase.from('settings').select('key, value'),
+  ]);
+
+  if (requestsRes.error) {
+    // Public/anon access might be restricted by RLS; only record if unexpected
+    console.warn('[Supabase] Public requests query:', requestsRes.error.message);
+  }
+  if (settingsRes.error) {
+    console.warn('[Supabase] Settings query:', settingsRes.error.message);
+  }
+
+  const requests = (requestsRes.data || []).map(mapRequestRow);
+  const settings: Record<string, unknown> = {};
+  for (const row of settingsRes.data || []) {
+    if (row?.key) settings[row.key] = row.value;
+  }
+
+  const unlocksUsedByRequestId: Record<string, number> = {};
+  const unlockFeeKshByRequestId: Record<string, number> = {};
+
+  await Promise.all(
+    requests.map(async (req) => {
+      const [usedRes, feeRes] = await Promise.all([
+        rpcUnlocksUsed(req.id),
+        rpcUnlockFeeKsh(req.budget_usd ?? req.budget),
+      ]);
+      if (usedRes.data !== null) unlocksUsedByRequestId[req.id] = usedRes.data;
+      if (feeRes.data !== null) unlockFeeKshByRequestId[req.id] = feeRes.data;
+    })
+  );
+
+  return {
+    requests,
+    settings,
+    unlocksUsedByRequestId,
+    unlockFeeKshByRequestId,
+    errors,
+  };
+}
+
+/**
+ * Load all authenticated user data directly from Supabase using the logged-in user's session.
+ * Never uses localStorage, sessionStorage, or hardcoded seed rows.
+ */
+export async function loadAuthenticatedSupabaseState(
+  authUserId: string
+): Promise<LoadedSupabaseState> {
+  const errors: string[] = [];
+
+  // 1. Load profile from `profiles`
+  const profileRes = await supabase
+    .from('profiles')
+    .select('id, email, full_name, role')
+    .eq('id', authUserId)
+    .maybeSingle();
+
+  if (profileRes.error) {
+    errors.push(formatSupabaseError('select profiles', profileRes.error));
+  }
+
+  const profile = profileRes.data ? mapProfileRow(profileRes.data) : null;
+  const role = profile?.role || 'traveler';
+
+  // 2. Load role-appropriate data + shared read-only tables in parallel
+  const requestsQuery =
+    role === 'traveler'
+      ? supabase
+          .from('requests')
+          .select(
+            'id, traveller_id, category, title, description, destination, start_date, end_date, adults, children, budget_usd, status, unlocking_enabled, unlock_limit, expires_at'
+          )
+          .eq('traveller_id', authUserId)
+      : supabase
+          .from('requests')
+          .select(
+            'id, traveller_id, category, title, description, destination, start_date, end_date, adults, children, budget_usd, status, unlocking_enabled, unlock_limit, expires_at'
+          );
+
   const [
-    profileRes,
-    operatorsRes,
     requestsRes,
+    operatorProfilesRes,
     bidsRes,
-    bookmarksRes,
-    unlocksRes,
+    passesRes,
     paymentsRes,
-    reviewsRes,
-    blogPostsRes,
-    reportsRes,
+    unlocksRes,
+    bookmarksRes,
+    settingsRes,
   ] = await Promise.all([
-    supabase.from('profiles').select('*').eq('id', authUserId).maybeSingle(),
+    requestsQuery,
     supabase
-      .from('operators')
-      .select('*')
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('travel_requests')
-      .select('*')
-      .order('created_at', { ascending: false }),
+      .from('operator_profiles')
+      .select(
+        'user_id, business_name, contact_person, email, phone, categories, regions, description, tra_licence_number, verification_requested'
+      ),
     supabase
       .from('bids')
-      .select('*')
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('bookmarks')
-      .select('*')
-      .eq('user_id', authUserId)
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('contact_unlocks')
-      .select('*')
-      .eq('user_id', authUserId)
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('payments')
-      .select('*')
-      .eq('user_id', authUserId)
-      .order('paid_at', { ascending: false }),
-    supabase
-      .from('reviews')
-      .select('*')
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('blog_posts')
-      .select('*')
-      .order('published_at', { ascending: false }),
-    supabase
-      .from('flagged_reports')
-      .select('*')
-      .eq('user_id', authUserId)
-      .order('created_at', { ascending: false }),
+      .select('id, request_id, operator_id, amount_usd, message, inclusions, valid_until'),
+    supabase.from('passes').select('*'),
+    supabase.from('payments').select('*'),
+    supabase.from('unlocks').select('*'),
+    supabase.from('bookmarks').select('operator_id, request_id'),
+    supabase.from('settings').select('key, value'),
   ]);
 
-  const errors = [
-    profileRes.error,
-    operatorsRes.error,
-    requestsRes.error,
-    bidsRes.error,
-    bookmarksRes.error,
-    unlocksRes.error,
-    paymentsRes.error,
-    reviewsRes.error,
-    blogPostsRes.error,
-    reportsRes.error,
-  ].filter(Boolean);
+  if (requestsRes.error) errors.push(formatSupabaseError('select requests', requestsRes.error));
+  if (operatorProfilesRes.error) {
+    errors.push(formatSupabaseError('select operator_profiles', operatorProfilesRes.error));
+  }
+  if (bidsRes.error) errors.push(formatSupabaseError('select bids', bidsRes.error));
+  if (passesRes.error) errors.push(formatSupabaseError('select passes', passesRes.error));
+  if (paymentsRes.error) errors.push(formatSupabaseError('select payments', paymentsRes.error));
+  if (unlocksRes.error) errors.push(formatSupabaseError('select unlocks', unlocksRes.error));
+  if (bookmarksRes.error) errors.push(formatSupabaseError('select bookmarks', bookmarksRes.error));
+  if (settingsRes.error) errors.push(formatSupabaseError('select settings', settingsRes.error));
 
-  if (errors.length > 0) {
-    console.warn('[Supabase] Some tables could not be loaded yet:', errors[0]?.message);
+  const requests = (requestsRes.data || []).map(mapRequestRow);
+
+  const passes: OperatorPassRecord[] = (passesRes.data || []).map((row: any) => ({
+    id: String(row.id ?? `${row.operator_id}_${row.expires_at}`),
+    operator_id: String(row.operator_id ?? row.user_id ?? authUserId),
+    expires_at: row.expires_at,
+    created_at: row.created_at,
+  }));
+
+  // Compute latest active pass per operator from `passes` table (Rule 5)
+  const nowMs = Date.now();
+  const activePassExpiryByOperator = new Map<string, string>();
+  for (const p of passes) {
+    const expMs = new Date(p.expires_at).getTime();
+    if (!Number.isNaN(expMs) && expMs > nowMs) {
+      const prev = activePassExpiryByOperator.get(p.operator_id);
+      if (!prev || expMs > new Date(prev).getTime()) {
+        activePassExpiryByOperator.set(p.operator_id, p.expires_at);
+      }
+    }
+  }
+
+  const operators = (operatorProfilesRes.data || []).map((row: any) => {
+    const op = mapOperatorProfileRow(row);
+    const activeExp = activePassExpiryByOperator.get(op.user_id) || null;
+    return {
+      ...op,
+      access_expires_at: activeExp,
+      bidding_pass_expires_at: activeExp,
+    };
+  });
+
+  const operatorMap = new Map<string, Operator>();
+  for (const op of operators) {
+    operatorMap.set(op.user_id, op);
+  }
+
+  const operatorProfile = operatorMap.get(authUserId) || null;
+
+  const bids = (bidsRes.data || []).map((row: any) => mapBidRow(row, operatorMap));
+  const payments = (paymentsRes.data || []).map(mapPaymentRow);
+  const unlocks = (unlocksRes.data || []).map(mapUnlockRow);
+  const bookmarks: Bookmark[] = (bookmarksRes.data || []).map((row: any) => ({
+    id: `${row.operator_id}_${row.request_id}`,
+    operator_id: String(row.operator_id),
+    request_id: String(row.request_id),
+    created_at: row.created_at || new Date().toISOString(),
+  }));
+
+  const settings: Record<string, unknown> = {};
+  for (const row of settingsRes.data || []) {
+    if (row?.key) settings[row.key] = row.value;
+  }
+
+  // 3. Fetch request_contacts (RLS returns rows ONLY for unlocked requests or owner) + RPCs (unlocks_used & unlock_fee_ksh)
+  const requestContactsByRequestId: Record<string, TravelerContact> = {};
+  const unlocksUsedByRequestId: Record<string, number> = {};
+  const unlockFeeKshByRequestId: Record<string, number> = {};
+
+  // Bulk select visible request_contacts in one query (RLS ensures only permitted rows return)
+  if (requests.length > 0) {
+    const contactsRes = await supabase
+      .from('request_contacts')
+      .select('request_id, email, whatsapp, phone')
+      .in(
+        'request_id',
+        requests.map((r) => r.id)
+      );
+
+    if (contactsRes.error) {
+      errors.push(formatSupabaseError('select request_contacts', contactsRes.error));
+    } else {
+      for (const row of contactsRes.data || []) {
+        requestContactsByRequestId[String(row.request_id)] = {
+          name: '',
+          email: row.email || '',
+          whatsapp: row.whatsapp || '',
+          phone: row.phone || '',
+          preferred_channel: row.whatsapp ? 'whatsapp' : row.phone ? 'phone' : 'email',
+        };
+      }
+    }
+
+    await Promise.all(
+      requests.map(async (req) => {
+        const [usedRes, feeRes] = await Promise.all([
+          rpcUnlocksUsed(req.id),
+          rpcUnlockFeeKsh(req.budget_usd ?? req.budget),
+        ]);
+        if (usedRes.error) errors.push(usedRes.error);
+        if (usedRes.data !== null) unlocksUsedByRequestId[req.id] = usedRes.data;
+
+        if (feeRes.error) errors.push(feeRes.error);
+        if (feeRes.data !== null) unlockFeeKshByRequestId[req.id] = feeRes.data;
+      })
+    );
   }
 
   return {
-    profile: (profileRes.data as User | null) ?? null,
-    operators: (operatorsRes.data as Operator[] | null) ?? [],
-    requests: (requestsRes.data as TravelRequest[] | null) ?? [],
-    bids: ((bidsRes.data as Bid[] | null) ?? []).map((b) => ({
-      ...b,
-      amount: b.price,
-    })),
-    bookmarks: (bookmarksRes.data as Bookmark[] | null) ?? [],
-    unlocks: (unlocksRes.data as ContactUnlockRecord[] | null) ?? [],
-    payments: ((paymentsRes.data as PaymentRecord[] | null) ?? []).map((p) => ({
-      ...p,
-      amount_ksh: p.amount,
-    })),
-    reviews: (reviewsRes.data as Review[] | null) ?? [],
-    blogPosts: (blogPostsRes.data as BlogPost[] | null) ?? [],
-    reports: (reportsRes.data as FlaggedReport[] | null) ?? [],
+    profile,
+    operatorProfile,
+    operators,
+    requests,
+    bids,
+    passes,
+    payments,
+    unlocks,
+    bookmarks,
+    requestContactsByRequestId,
+    unlocksUsedByRequestId,
+    unlockFeeKshByRequestId,
+    settings,
+    errors,
   };
 }
 
-// ============================================================================
-// PROFILES (Create / Update)
-// ============================================================================
-export async function upsertProfileInDb(profile: User): Promise<void> {
-  const { error } = await supabase.from('profiles').upsert(
-    {
-      id: profile.id,
-      email: profile.email,
-      role: profile.role,
-      name: profile.name,
-      country: profile.country,
-      phone: profile.phone ?? null,
-      preferred_currency: profile.preferred_currency ?? 'USD',
-    },
-    { onConflict: 'id' }
-  );
-  if (error) console.warn('[Supabase] upsertProfile error:', error.message);
-}
+/**
+ * Rule 2: Traveller posts a request:
+ * 1) Insert into `requests` (DO NOT send `traveller_id`, database fills it; NEVER put contact details in `requests`).
+ * 2) Insert contact details into `request_contacts` with the new request id.
+ */
+export async function createRequestWithContactsInDb(params: {
+  category: TravelCategory;
+  title: string;
+  description: string;
+  destination: string;
+  start_date: string;
+  end_date: string;
+  adults: number;
+  children: number;
+  budget_usd: number;
+  email: string;
+  whatsapp: string;
+  phone: string;
+}): Promise<SupabaseResult<TravelRequest>> {
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-// ============================================================================
-// TRAVEL REQUESTS (Create / Update / Delete)
-// ============================================================================
-export async function createTravelRequestInDb(
-  authUserId: string,
-  req: TravelRequest
-): Promise<void> {
-  const { error } = await supabase.from('travel_requests').insert({
-    id: req.id,
-    user_id: authUserId,
-    traveler_id: req.traveler_id,
-    traveler_name: req.traveler_name,
-    traveler_country: req.traveler_country,
-    title: req.title,
-    category: req.category,
-    start_date: req.start_date,
-    end_date: req.end_date,
-    flexible_month: req.flexible_month ?? null,
-    adults: req.adults,
-    children: req.children,
-    budget: req.budget,
-    currency: req.currency,
-    budget_usd: req.budget_usd ?? null,
-    notes: req.notes,
-    safari_details: req.safari_details ?? null,
-    hotel_details: req.hotel_details ?? null,
-    bnb_details: req.bnb_details ?? null,
-    slot_limit: req.slot_limit,
-    unlock_limit: req.unlock_limit,
-    unlocks_enabled: req.unlocks_enabled,
-    bids_only: Boolean(req.bids_only),
-    status: req.status,
-    expires_at: req.expires_at,
-    closed_reason: req.closed_reason ?? null,
-    whatsapp_number: req.whatsapp_number ?? null,
-    call_number: req.call_number ?? null,
-    email_address: req.email_address ?? null,
-    preferred_contact_method: req.preferred_contact_method ?? null,
-    preferred_contact_methods: req.preferred_contact_methods ?? null,
-    is_booked: Boolean(req.is_booked),
-    booked_operator_id: req.booked_operator_id ?? null,
-    booked_at: req.booked_at ?? null,
-    created_at: req.created_at,
+  const { data: insertedRequest, error: requestError } = await supabase
+    .from('requests')
+    .insert({
+      category: params.category,
+      title: params.title,
+      description: params.description,
+      destination: params.destination,
+      start_date: params.start_date,
+      end_date: params.end_date,
+      adults: params.adults,
+      children: params.children,
+      budget_usd: params.budget_usd,
+      status: 'open',
+      unlocking_enabled: true,
+      unlock_limit: 30,
+      expires_at: expiresAt,
+    })
+    .select(
+      'id, traveller_id, category, title, description, destination, start_date, end_date, adults, children, budget_usd, status, unlocking_enabled, unlock_limit, expires_at'
+    )
+    .single();
+
+  if (requestError || !insertedRequest) {
+    return {
+      data: null,
+      error: formatSupabaseError('insert requests', requestError),
+    };
+  }
+
+  const { error: contactError } = await supabase.from('request_contacts').insert({
+    request_id: insertedRequest.id,
+    email: params.email,
+    whatsapp: params.whatsapp,
+    phone: params.phone,
   });
-  if (error) console.warn('[Supabase] createTravelRequest error:', error.message);
+
+  if (contactError) {
+    return {
+      data: mapRequestRow(insertedRequest),
+      error: formatSupabaseError('insert request_contacts', contactError),
+    };
+  }
+
+  return {
+    data: mapRequestRow(insertedRequest),
+    error: null,
+  };
 }
 
-export async function updateTravelRequestInDb(
-  authUserId: string,
+/**
+ * Rule 3: Traveller updates their request (`status`, `unlocking_enabled`, `unlock_limit`, etc.).
+ */
+export async function updateRequestInDb(
   requestId: string,
-  updates: Partial<TravelRequest>
-): Promise<void> {
-  const { error } = await supabase
-    .from('travel_requests')
+  updates: Partial<{
+    title: string;
+    description: string;
+    destination: string;
+    start_date: string;
+    end_date: string;
+    adults: number;
+    children: number;
+    budget_usd: number;
+    status: 'open' | 'closed';
+    unlocking_enabled: boolean;
+    unlock_limit: number;
+    expires_at: string;
+  }>
+): Promise<SupabaseResult<TravelRequest>> {
+  const { data, error } = await supabase
+    .from('requests')
     .update(updates)
     .eq('id', requestId)
-    .eq('user_id', authUserId);
-  if (error) console.warn('[Supabase] updateTravelRequest error:', error.message);
+    .select(
+      'id, traveller_id, category, title, description, destination, start_date, end_date, adults, children, budget_usd, status, unlocking_enabled, unlock_limit, expires_at'
+    )
+    .single();
+
+  if (error || !data) {
+    return { data: null, error: formatSupabaseError('update requests', error) };
+  }
+
+  return { data: mapRequestRow(data), error: null };
 }
 
-export async function deleteTravelRequestInDb(
-  authUserId: string,
-  requestId: string
-): Promise<void> {
-  const { error } = await supabase
-    .from('travel_requests')
-    .delete()
-    .eq('id', requestId)
-    .eq('user_id', authUserId);
-  if (error) console.warn('[Supabase] deleteTravelRequest error:', error.message);
+/**
+ * Rule 4: Operator inserts into `bids` ONLY.
+ * If the insert fails because there is no active pass, returns "Pay KSH 850 to bid" + real Supabase error.
+ */
+export async function insertBidInDb(params: {
+  request_id: string;
+  operator_id: string;
+  amount_usd: number;
+  message: string;
+  inclusions: string[];
+  valid_until: string;
+}): Promise<SupabaseResult<any>> {
+  const { data, error } = await supabase
+    .from('bids')
+    .insert({
+      request_id: params.request_id,
+      operator_id: params.operator_id,
+      amount_usd: params.amount_usd,
+      message: params.message,
+      inclusions: params.inclusions.join('\n'),
+      valid_until: params.valid_until,
+    })
+    .select('id, request_id, operator_id, amount_usd, message, inclusions, valid_until')
+    .single();
+
+  if (error) {
+    const rawMsg = error.message || '';
+    const isPassOrRlsError =
+      error.code === '42501' ||
+      /pass|row-level security|policy|permission|denied/i.test(rawMsg);
+
+    const formatted = formatSupabaseError('insert bids', error);
+    return {
+      data: null,
+      error: isPassOrRlsError ? `Pay KSH 850 to bid (${formatted})` : formatted,
+    };
+  }
+
+  return { data, error: null };
 }
 
-// ============================================================================
-// OPERATORS (Create / Update)
-// ============================================================================
-export async function upsertOperatorInDb(
-  authUserId: string,
-  operator: Operator
-): Promise<void> {
-  const { error } = await supabase.from('operators').upsert(
-    {
-      id: operator.id,
-      user_id: authUserId,
-      business_name: operator.business_name,
-      contact_name: operator.contact_name,
-      phone: operator.phone,
-      email: operator.email,
-      categories: operator.categories,
-      regions: operator.regions,
-      description: operator.description ?? '',
-      licence_number: operator.licence_number ?? null,
-      licence_file_name: operator.licence_file_name ?? null,
-      business_registration_file_name: operator.business_registration_file_name ?? null,
-      status: operator.status,
-      is_profile_complete: operator.is_profile_complete ?? true,
-      rejection_reason: operator.rejection_reason ?? null,
-      access_expires_at: operator.access_expires_at ?? null,
-      bidding_pass_expires_at: operator.bidding_pass_expires_at ?? null,
-      contact_unlock_expires_at: operator.contact_unlock_expires_at ?? null,
-      rating: operator.rating,
-      review_count: operator.review_count,
-      created_at: operator.created_at,
-    },
-    { onConflict: 'id' }
-  );
-  if (error) console.warn('[Supabase] upsertOperator error:', error.message);
+/**
+ * Operator profile upsert into `operator_profiles`.
+ */
+export async function upsertOperatorProfileInDb(params: {
+  user_id: string;
+  business_name: string;
+  contact_person: string;
+  email: string;
+  phone: string;
+  categories: TravelCategory[];
+  regions: string[];
+  description?: string;
+  tra_licence_number?: string;
+  verification_requested?: boolean;
+}): Promise<SupabaseResult<Operator>> {
+  const { data, error } = await supabase
+    .from('operator_profiles')
+    .upsert(
+      {
+        user_id: params.user_id,
+        business_name: params.business_name,
+        contact_person: params.contact_person,
+        email: params.email,
+        phone: params.phone,
+        categories: params.categories,
+        regions: params.regions.join(', '),
+        description: params.description || '',
+        tra_licence_number: params.tra_licence_number || null,
+        verification_requested: Boolean(params.verification_requested),
+      },
+      { onConflict: 'user_id' }
+    )
+    .select(
+      'user_id, business_name, contact_person, email, phone, categories, regions, description, tra_licence_number, verification_requested'
+    )
+    .single();
+
+  if (error || !data) {
+    return { data: null, error: formatSupabaseError('upsert operator_profiles', error) };
+  }
+
+  return { data: mapOperatorProfileRow(data), error: null };
 }
 
-export async function updateOperatorInDb(
-  authUserId: string,
+/**
+ * Update authenticated user's `profiles` row (`full_name` only; role is managed by DB).
+ */
+export async function updateProfileInDb(
+  userId: string,
+  fullName: string
+): Promise<SupabaseResult<User>> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ full_name: fullName })
+    .eq('id', userId)
+    .select('id, email, full_name, role')
+    .single();
+
+  if (error || !data) {
+    return { data: null, error: formatSupabaseError('update profiles', error) };
+  }
+
+  return { data: mapProfileRow(data), error: null };
+}
+
+/**
+ * Bookmarks: Insert or delete in `bookmarks(operator_id, request_id)`.
+ */
+export async function addBookmarkInDb(
   operatorId: string,
-  updates: Partial<Operator>
-): Promise<void> {
-  const { error } = await supabase
-    .from('operators')
-    .update(updates)
-    .eq('id', operatorId)
-    .eq('user_id', authUserId);
-  if (error) console.warn('[Supabase] updateOperator error:', error.message);
-}
-
-// ============================================================================
-// BIDS (Create / Update / Delete)
-// ============================================================================
-export async function createBidInDb(authUserId: string, bid: Bid): Promise<void> {
-  const { error } = await supabase.from('bids').insert({
-    id: bid.id,
-    user_id: authUserId,
-    request_id: bid.request_id,
-    operator_id: bid.operator_id,
-    operator_business_name: bid.operator_business_name,
-    operator_rating: bid.operator_rating,
-    operator_review_count: bid.operator_review_count,
-    operator_verified: bid.operator_verified,
-    price: bid.price,
-    currency: bid.currency,
-    inclusions: bid.inclusions,
-    message: bid.message,
-    follow_ups: bid.follow_ups ?? [],
-    valid_until: bid.valid_until,
-    status: bid.status,
-    operator_email: bid.operator_email ?? null,
-    operator_whatsapp: bid.operator_whatsapp ?? null,
-    operator_phone: bid.operator_phone ?? null,
-    created_at: bid.created_at,
-  });
-  if (error) console.warn('[Supabase] createBid error:', error.message);
-}
-
-export async function updateBidInDb(
-  _authUserId: string,
-  bidId: string,
-  updates: Partial<Bid>
-): Promise<void> {
-  const { amount: _ignoredAmount, ...dbUpdates } = updates;
-  const { error } = await supabase
-    .from('bids')
-    .update(dbUpdates)
-    .eq('id', bidId);
-  if (error) console.warn('[Supabase] updateBid error:', error.message);
-}
-
-export async function deleteBidInDb(authUserId: string, bidId: string): Promise<void> {
-  const { error } = await supabase
-    .from('bids')
-    .delete()
-    .eq('id', bidId)
-    .eq('user_id', authUserId);
-  if (error) console.warn('[Supabase] deleteBid error:', error.message);
-}
-
-// ============================================================================
-// BOOKMARKS (Create / Delete)
-// ============================================================================
-export async function createBookmarkInDb(
-  authUserId: string,
-  bookmark: Bookmark
-): Promise<void> {
+  requestId: string
+): Promise<SupabaseResult<null>> {
   const { error } = await supabase.from('bookmarks').insert({
-    id: bookmark.id,
-    user_id: authUserId,
-    operator_id: bookmark.operator_id,
-    request_id: bookmark.request_id,
-    created_at: bookmark.created_at,
+    operator_id: operatorId,
+    request_id: requestId,
   });
-  if (error) console.warn('[Supabase] createBookmark error:', error.message);
+  if (error) {
+    return { data: null, error: formatSupabaseError('insert bookmarks', error) };
+  }
+  return { data: null, error: null };
 }
 
-export async function deleteBookmarkInDb(
-  authUserId: string,
+export async function removeBookmarkInDb(
   operatorId: string,
   requestId: string
-): Promise<void> {
+): Promise<SupabaseResult<null>> {
   const { error } = await supabase
     .from('bookmarks')
     .delete()
-    .eq('user_id', authUserId)
     .eq('operator_id', operatorId)
     .eq('request_id', requestId);
-  if (error) console.warn('[Supabase] deleteBookmark error:', error.message);
+  if (error) {
+    return { data: null, error: formatSupabaseError('delete bookmarks', error) };
+  }
+  return { data: null, error: null };
 }
 
-// ============================================================================
-// CONTACT UNLOCKS & PAYMENTS (Create)
-// ============================================================================
-export async function createContactUnlockInDb(
-  authUserId: string,
-  unlock: ContactUnlockRecord
-): Promise<void> {
-  const { error } = await supabase.from('contact_unlocks').insert({
-    id: unlock.id,
-    user_id: authUserId,
-    request_id: unlock.request_id,
-    operator_id: unlock.operator_id,
-    tier: unlock.tier,
-    fee_ksh: unlock.fee_ksh,
-    status: unlock.status,
-    held_until: unlock.held_until,
-    paid_at: unlock.paid_at ?? null,
-    request_title: unlock.request_title,
-    request_category: unlock.request_category,
-    traveler_country: unlock.traveler_country ?? null,
-    traveler_contact: unlock.traveler_contact ?? null,
-    mpesa_transaction_id: unlock.mpesa_transaction_id ?? null,
-  });
-  if (error) console.warn('[Supabase] createContactUnlock error:', error.message);
+/**
+ * Rule 9: Upload licence documents to the private storage bucket "verification-docs"
+ * under the path <user_id>/<filename>.
+ */
+export async function uploadVerificationDocToStorage(
+  userId: string,
+  file: File
+): Promise<SupabaseResult<string>> {
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const filePath = `${userId}/${safeName}`;
+
+  const { data, error } = await supabase.storage
+    .from('verification-docs')
+    .upload(filePath, file, { upsert: true });
+
+  if (error) {
+    return {
+      data: null,
+      error: formatSupabaseError('storage upload verification-docs', error),
+    };
+  }
+
+  return { data: data?.path || filePath, error: null };
 }
 
-export async function createPaymentInDb(
-  authUserId: string,
-  payment: PaymentRecord
-): Promise<void> {
-  const { error } = await supabase.from('payments').insert({
-    id: payment.id,
-    user_id: authUserId,
-    operator_id: payment.operator_id,
-    operator_business_name: payment.operator_business_name ?? null,
-    type: payment.type ?? null,
-    pass_type: payment.pass_type ?? null,
-    request_id: payment.request_id ?? null,
-    request_title: payment.request_title ?? null,
-    amount: payment.amount,
-    currency: payment.currency,
-    mpesa_transaction_id: payment.mpesa_transaction_id,
-    phone_number: payment.phone_number ?? null,
-    status: payment.status,
-    failure_reason: payment.failure_reason ?? null,
-    paid_at: payment.paid_at,
-    pass_expires_at: payment.pass_expires_at || null,
-  });
-  if (error) console.warn('[Supabase] createPayment error:', error.message);
+/**
+ * Rule 7: Payments, passes, and unlocks are NOT created by the frontend.
+ * Calls a placeholder Supabase Edge Function to initiate M-Pesa STK push and
+ * returns a clear "not connected yet" message along with any Supabase error.
+ */
+export async function invokeMpesaPaymentEdgeFunction(params: {
+  paymentType: 'bidding_pass' | 'contact_unlock';
+  phoneNumber: string;
+  requestId?: string;
+}): Promise<{ success: boolean; message: string }> {
+  try {
+    const { data, error } = await supabase.functions.invoke('mpesa-stk-push', {
+      body: {
+        payment_type: params.paymentType,
+        phone_number: params.phoneNumber,
+        request_id: params.requestId,
+      },
+    });
+
+    if (error) {
+      return {
+        success: false,
+        message: `M-Pesa payment Edge Function is not connected yet. (${error.message})`,
+      };
+    }
+
+    if (data && data.success) {
+      return {
+        success: true,
+        message: data.message || 'M-Pesa STK push sent to your phone.',
+      };
+    }
+
+    return {
+      success: false,
+      message:
+        data?.message ||
+        'M-Pesa payment Edge Function is not connected yet. Payments, passes, and unlocks must be processed server-side.',
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      message: `M-Pesa payment Edge Function is not connected yet. (${msg})`,
+    };
+  }
 }
 
-// ============================================================================
-// REVIEWS (Create)
-// ============================================================================
-export async function createReviewInDb(
-  authUserId: string,
-  review: Review
-): Promise<void> {
-  const { error } = await supabase.from('reviews').insert({
-    id: review.id,
-    user_id: authUserId,
-    operator_id: review.operator_id,
-    traveler_id: review.traveler_id,
-    traveler_name: review.traveler_name,
-    traveler_country: review.traveler_country,
-    request_id: review.request_id,
-    rating: review.rating,
-    comment: review.comment,
-    trip_type: review.trip_type,
-    created_at: review.created_at,
-  });
-  if (error) console.warn('[Supabase] createReview error:', error.message);
-}
-
-// ============================================================================
-// BLOG POSTS (Create / Delete)
-// ============================================================================
-export async function createBlogPostInDb(
-  authUserId: string,
-  post: BlogPost
-): Promise<void> {
-  const { error } = await supabase.from('blog_posts').insert({
-    id: post.id,
-    user_id: authUserId,
-    slug: post.slug,
-    title: post.title,
-    destination: post.destination,
-    category: post.category,
-    image_url: post.image_url,
-    author_name: post.author_name,
-    author_role: post.author_role,
-    published_at: post.published_at,
-    read_time: post.read_time,
-    excerpt: post.excerpt,
-    content: post.content,
-    best_months: post.best_months,
-    estimated_budget_usd: post.estimated_budget_usd,
-    recommended_duration: post.recommended_duration,
-    highlights: post.highlights,
-    cta_prompt: post.cta_prompt ?? null,
-    cta_button_label: post.cta_button_label ?? null,
-    cta_category: post.cta_category ?? null,
-  });
-  if (error) console.warn('[Supabase] createBlogPost error:', error.message);
-}
-
-export async function deleteBlogPostInDb(
-  authUserId: string,
-  postId: string
-): Promise<void> {
-  const { error } = await supabase
-    .from('blog_posts')
-    .delete()
-    .eq('id', postId)
-    .eq('user_id', authUserId);
-  if (error) console.warn('[Supabase] deleteBlogPost error:', error.message);
-}
-
-// ============================================================================
-// FLAGGED REPORTS (Create / Update)
-// ============================================================================
-export async function createReportInDb(
-  authUserId: string,
-  report: FlaggedReport
-): Promise<void> {
-  const { error } = await supabase.from('flagged_reports').insert({
-    id: report.id,
-    user_id: authUserId,
-    reported_by_id: report.reported_by_id,
-    reported_by_name: report.reported_by_name,
-    target_type: report.target_type,
-    target_id: report.target_id,
-    target_title: report.target_title,
-    reason: report.reason,
-    details: report.details,
-    status: report.status,
-    created_at: report.created_at,
-  });
-  if (error) console.warn('[Supabase] createReport error:', error.message);
-}
-
-export async function updateReportStatusInDb(
-  authUserId: string,
-  reportId: string,
-  status: 'resolved' | 'dismissed'
-): Promise<void> {
-  const { error } = await supabase
-    .from('flagged_reports')
-    .update({ status })
-    .eq('id', reportId)
-    .eq('user_id', authUserId);
-  if (error) console.warn('[Supabase] updateReportStatus error:', error.message);
+export function mapSettingsToAdminConfig(
+  settings: Record<string, unknown>,
+  defaults: AdminMarketplaceSettings
+): AdminMarketplaceSettings {
+  return {
+    ...defaults,
+    biddingPassFeeKsh: Number(
+      settings.bidding_pass_price_ksh ??
+        settings.biddingPassFeeKsh ??
+        defaults.biddingPassFeeKsh
+    ),
+    maxUnlocksPerListing: Number(
+      settings.default_unlock_limit ??
+        settings.maxUnlocksPerListing ??
+        defaults.maxUnlocksPerListing
+    ),
+  };
 }

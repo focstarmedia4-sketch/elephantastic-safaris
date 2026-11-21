@@ -8,7 +8,6 @@ import { AppProvider, useApp } from './context/AppContext';
 import { supabase } from './supabaseClient';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
-import { RoleSwitcherModal } from './components/RoleSwitcherModal';
 import { AuthPromptModal } from './components/AuthPromptModal';
 
 // 14 Pages across 3 Audiences
@@ -36,13 +35,12 @@ import { OperatorDashboardPage } from './pages/operator/OperatorDashboardPage';
 import { VerificationQueuePage } from './pages/admin/VerificationQueuePage';
 import { ReportsPaymentsPage } from './pages/admin/ReportsPaymentsPage';
 
-import { Users, Compass, Briefcase, ShieldCheck } from 'lucide-react';
+import { AlertCircle, X } from 'lucide-react';
 
 const PUBLIC_TABS = new Set(['home', 'how-it-works', 'login', 'blog', 'blog-detail', 'shared-request']);
 
 const AppContent: React.FC = () => {
-  const { activeTab, setActiveTab, currentUser } = useApp();
-  const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
+  const { activeTab, setActiveTab, supabaseError, clearSupabaseError } = useApp();
   const [authChecked, setAuthChecked] = useState(false);
   const [hasSession, setHasSession] = useState(false);
 
@@ -159,44 +157,30 @@ const AppContent: React.FC = () => {
       {/* Top Bar adheres to Top Bar Contract */}
       <Navbar />
 
+      {/* Real Supabase Error Banner (Rule 8) */}
+      {supabaseError && (
+        <div className="bg-red-50 border-b border-red-200 px-4 py-3 text-xs text-red-800">
+          <div className="max-w-7xl mx-auto flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <span className="font-mono break-all">{supabaseError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={clearSupabaseError}
+              className="p-1 text-red-600 hover:text-red-900 rounded cursor-pointer shrink-0"
+              aria-label="Dismiss error"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Page Canvas */}
       <main className="flex-1">
         {renderActivePage()}
       </main>
-
-      {/* Floating Persona Test Assistant Bar */}
-      <div className="fixed bottom-4 right-4 z-30">
-        <button
-          onClick={() => setRoleSwitcherOpen(true)}
-          className="px-3.5 py-2 rounded-full bg-safari-dusk text-stone-100 hover:bg-safari-dusk-light text-xs font-semibold shadow-lg border border-desert-atlas/40 flex items-center gap-2 transition-all hover:scale-105"
-          title="Switch demo persona (Traveler, Operator, Admin)"
-        >
-          {currentUser ? (
-            <>
-              {currentUser.role === 'traveler' ? (
-                <Compass className="w-3.5 h-3.5 text-highlight-accent" />
-              ) : currentUser.role === 'operator' ? (
-                <Briefcase className="w-3.5 h-3.5 text-desert-atlas" />
-              ) : (
-                <ShieldCheck className="w-3.5 h-3.5 text-desert-atlas" />
-              )}
-              <span>Persona: <strong className="text-desert-atlas-light">{currentUser.name.split(' ')[0]}</strong> ({currentUser.role})</span>
-              <span className="text-[10px] text-desert-atlas underline font-normal">Switch</span>
-            </>
-          ) : (
-            <>
-              <Compass className="w-3.5 h-3.5 text-desert-atlas" />
-              <span>Browsing as: <strong className="text-desert-atlas-light">Guest</strong></span>
-              <span className="text-[10px] text-desert-atlas underline font-normal">Log In / Switch</span>
-            </>
-          )}
-        </button>
-      </div>
-
-      <RoleSwitcherModal
-        isOpen={roleSwitcherOpen}
-        onClose={() => setRoleSwitcherOpen(false)}
-      />
 
       {/* Auth Prompt Modal (Prompts registration/sign up first) */}
       <AuthPromptModal />

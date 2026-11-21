@@ -26,7 +26,7 @@ export const AuthPromptModal: React.FC = () => {
   const {
     authPrompt,
     closeAuthPrompt,
-    loginUser,
+    refreshData,
     setActiveTab,
   } = useApp();
 
@@ -106,9 +106,17 @@ export const AuthPromptModal: React.FC = () => {
 
       setIsSubmitting(true);
       try {
+        // Rule 1: Pass role ('traveller' | 'operator', never 'admin') and full_name in options.data
+        const dbRole = role === 'operator' ? 'operator' : 'traveller';
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: trimmedEmail,
           password,
+          options: {
+            data: {
+              role: dbRole,
+              full_name: name.trim(),
+            },
+          },
         });
 
         if (signUpError) {
@@ -151,12 +159,7 @@ export const AuthPromptModal: React.FC = () => {
           return;
         }
 
-        localStorage.setItem('elephantastic_has_registered', 'true');
-        const derivedName =
-          (data.user?.user_metadata?.name as string | undefined) ||
-          trimmedEmail.split('@')[0] ||
-          'Traveler';
-        loginUser(trimmedEmail, role, derivedName, 'United Kingdom', undefined, data.user?.id);
+        await refreshData();
         closeAuthPrompt();
         if (window.location.pathname !== '/') {
           window.history.pushState(null, '', '/');

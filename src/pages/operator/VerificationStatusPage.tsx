@@ -3,7 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { ShieldCheck, Clock, XCircle, CheckCircle2, ArrowRight, FileText, CreditCard } from 'lucide-react';
 
 export const VerificationStatusPage: React.FC = () => {
-  const { currentOperator, setActiveTab, currentUser, switchUser } = useApp();
+  const { currentOperator, setActiveTab, currentUser } = useApp();
 
   if (!currentOperator) {
     return (
@@ -122,20 +122,6 @@ export const VerificationStatusPage: React.FC = () => {
               <p className="text-mountain-hostel/70">
                 <strong>Rule:</strong> Payment of 24h access passes is unlocked only after approval, ensuring unverified operators never interact with travelers.
               </p>
-            </div>
-
-            {/* Quick Demo Assist */}
-            <div className="p-4 rounded-xl bg-stone-50 border border-stone-200 text-xs text-stone-600 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <span className="font-semibold text-stone-900 block">Testing as Evaluator?</span>
-                Switch to Admin persona to review and approve this operator application immediately.
-              </div>
-              <button
-                onClick={() => switchUser('user_admin_1')}
-                className="px-3.5 py-1.5 text-xs font-medium text-stone-900 bg-white hover:bg-stone-100 border border-stone-300 rounded-lg transition-colors whitespace-nowrap shrink-0"
-              >
-                Switch to Admin &rarr;
-              </button>
             </div>
           </div>
         )}

@@ -24,19 +24,17 @@ const SIGNUP_SUCCESS_MESSAGE =
   'Your account has been created. Please check your email and verify your address before logging in.';
 
 export const AuthPage: React.FC = () => {
-  const { loginUser, setActiveTab, tabParam } = useApp();
+  const { refreshData, setActiveTab, tabParam } = useApp();
 
   const initialParams = new URLSearchParams(window.location.search);
   const initialSignupSuccess = initialParams.get('signup') === 'success';
   const initialPrefillEmail = initialParams.get('email') || '';
 
-  // First time visitor is prompted to register; returning users who have an account can sign in with email & password
   const [authMode, setAuthMode] = useState<'register' | 'signin'>(() => {
     if (initialSignupSuccess) return 'signin';
     if (tabParam === 'traveler' || tabParam === 'operator' || tabParam === 'register') return 'register';
     if (tabParam === 'signin') return 'signin';
-    const hasAccount = localStorage.getItem('elephantastic_has_registered');
-    return hasAccount ? 'signin' : 'register';
+    return 'signin';
   });
 
   const [role, setRole] = useState<UserRole>(tabParam === 'operator' ? 'operator' : 'traveler');
@@ -127,9 +125,17 @@ export const AuthPage: React.FC = () => {
 
       setIsSubmitting(true);
       try {
+        // Rule 1: Pass role ('traveller' | 'operator', never 'admin') and full_name in options.data
+        const dbRole = role === 'operator' ? 'operator' : 'traveller';
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: trimmedEmail,
           password,
+          options: {
+            data: {
+              role: dbRole,
+              full_name: name.trim(),
+            },
+          },
         });
 
         if (signUpError) {
@@ -174,12 +180,7 @@ export const AuthPage: React.FC = () => {
           return;
         }
 
-        localStorage.setItem('elephantastic_has_registered', 'true');
-        const derivedName =
-          (data.user?.user_metadata?.name as string | undefined) ||
-          trimmedEmail.split('@')[0] ||
-          'Traveler';
-        loginUser(trimmedEmail, role, derivedName, 'United Kingdom', undefined, data.user?.id);
+        await refreshData();
         if (window.location.pathname !== '/') {
           window.history.pushState(null, '', '/');
         }
@@ -214,15 +215,7 @@ export const AuthPage: React.FC = () => {
     }
   };
 
-  const handleQuickDemo = (demoRole: UserRole) => {
-    if (demoRole === 'traveler') {
-      loginUser('sarah.jenkins@oxfordtravel.co.uk', 'traveler', 'Sarah Jenkins', 'United Kingdom', 'safari123');
-    } else if (demoRole === 'operator') {
-      loginUser('jackson@marawildexpeditions.co.ke', 'operator', 'Jackson Ole Kaelo', 'Kenya', 'safari123');
-    } else {
-      loginUser('njeri@elephantasticsafaris.co.ke', 'admin', 'Njeri Njuguna', 'Kenya', 'safari123');
-    }
-  };
+
 
   return (
     <div className="max-w-md mx-auto px-4 py-12 sm:py-16 space-y-6">
@@ -691,32 +684,7 @@ export const AuthPage: React.FC = () => {
         </p>
       )}
 
-      {/* Quick Demo Pre-sets for reviewer convenience */}
-      <div className="pt-2 border-t border-stone-200 space-y-2">
-        <div className="text-center text-xs text-stone-500 font-medium uppercase tracking-wider">
-          One-Click Demo Personas
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            onClick={() => handleQuickDemo('traveler')}
-            className="p-2.5 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-xs font-medium text-stone-800 text-center transition-colors min-h-[44px] cursor-pointer"
-          >
-            Traveler (UK)
-          </button>
-          <button
-            onClick={() => handleQuickDemo('operator')}
-            className="p-2.5 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-xs font-medium text-stone-800 text-center transition-colors min-h-[44px] cursor-pointer"
-          >
-            Operator (Kenya)
-          </button>
-          <button
-            onClick={() => handleQuickDemo('admin')}
-            className="p-2.5 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-xs font-medium text-stone-800 text-center transition-colors min-h-[44px] cursor-pointer"
-          >
-            Admin (Njeri)
-          </button>
-        </div>
-      </div>
+
 
       <LegalModal
         isOpen={showTermsModal}

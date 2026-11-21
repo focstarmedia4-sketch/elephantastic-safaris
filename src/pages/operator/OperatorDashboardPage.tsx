@@ -46,6 +46,7 @@ export const OperatorDashboardPage: React.FC = () => {
     isBookmarked,
     isProfileComplete,
     updateOperatorProfile,
+    uploadLicenceDocument,
     payBiddingPass,
     getPassHistory,
     verifyPassOnServer,
@@ -66,6 +67,9 @@ export const OperatorDashboardPage: React.FC = () => {
   // Profile modal state
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [profileSuccessMsg, setProfileSuccessMsg] = useState('');
+  const [profileErrorMsg, setProfileErrorMsg] = useState('');
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  const [uploadedDocPath, setUploadedDocPath] = useState('');
 
   // Payment Pass modal state
   const [passModalOpen, setPassModalOpen] = useState(false);
@@ -274,9 +278,33 @@ export const OperatorDashboardPage: React.FC = () => {
     }
   };
 
-  const handleProfileSubmit = (e: React.FormEvent) => {
+  const handleLicenceFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    kind: 'licence' | 'registration'
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setProfileErrorMsg('');
+    setIsUploadingDoc(true);
+    const res = await uploadLicenceDocument(file);
+    setIsUploadingDoc(false);
+    if (!res.success || !res.path) {
+      setProfileErrorMsg(res.error || 'Failed to upload document to verification-docs.');
+      return;
+    }
+    setUploadedDocPath(res.path);
+    if (kind === 'licence') {
+      setLicenceFileName(res.path);
+    } else {
+      setBusinessRegFileName(res.path);
+    }
+  };
+
+  const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateOperatorProfile({
+    setProfileErrorMsg('');
+    setProfileSuccessMsg('');
+    const res = await updateOperatorProfile({
       business_name: businessName,
       contact_name: contactName,
       phone,
@@ -287,13 +315,19 @@ export const OperatorDashboardPage: React.FC = () => {
       licence_number: licenceNumber,
       licence_file_name: licenceFileName,
       business_registration_file_name: businessRegFileName,
+      verification_requested: Boolean(licenceNumber.trim() || uploadedDocPath),
     });
 
-    setProfileSuccessMsg('Profile updated and saved privately. You can now bid and unlock contacts.');
+    if (!res.success) {
+      setProfileErrorMsg(res.error || 'Failed to save operator profile.');
+      return;
+    }
+
+    setProfileSuccessMsg('Profile saved to Supabase.');
     setTimeout(() => {
       setProfileModalOpen(false);
       setProfileSuccessMsg('');
-    }, 1200);
+    }, 1000);
   };
 
   // Pay Bidding Pass (KSH 850 by M-Pesa for 24 hours)
@@ -470,16 +504,16 @@ export const OperatorDashboardPage: React.FC = () => {
     setBidModalOpen(true);
   };
 
-  // Submit Bid Handler
-  const handleBidSubmit = (e: React.FormEvent) => {
+  // Submit Bid Handler (Rule 4: insert into bids only; shows "Pay KSH 850 to bid" if pass missing)
+  const handleBidSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedBidRequest || !currentOperator) return;
     setBidModalError('');
 
-    const res = submitBid({
+    const res = await submitBid({
       request_id: selectedBidRequest.id,
       price: Number(bidPrice),
-      currency: bidCurrency,
+      currency: 'USD',
       inclusions: bidInclusions,
       message: bidMessage,
       valid_until: bidValidity,
@@ -489,7 +523,7 @@ export const OperatorDashboardPage: React.FC = () => {
     });
 
     if (res.success) {
-      setBidModalSuccess(existingBidToEdit ? 'Bid updated successfully.' : 'Bid submitted successfully.');
+      setBidModalSuccess('Bid submitted successfully.');
       setTimeout(() => {
         setBidModalOpen(false);
         setBidModalSuccess('');
@@ -1474,7 +1508,12 @@ export const OperatorDashboardPage: React.FC = () => {
                 />
               </div>
 
-              {/* Licensing & Registration */}
+              {/* Licensing & Registration (Rule 9: uploads to private storage bucket "verification-docs" under <user_id>/<filename>) */}
+              {profileErrorMsg && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-mono">
+                  {profileErrorMsg}
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-[#E2DED3]">
                 <div>
                   <label className="block text-stone-700 font-semibold mb-1">
@@ -1490,25 +1529,37 @@ export const OperatorDashboardPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-stone-700 font-semibold mb-1">
-                    Licence Upload (File)
+                    Licence Document (verification-docs)
                   </label>
                   <input
-                    type="text"
-                    value={licenceFileName}
-                    onChange={(e) => setLicenceFileName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-[#E2DED3] text-xs font-mono text-stone-600 bg-stone-50"
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg"
+                    disabled={isUploadingDoc}
+                    onChange={(e) => void handleLicenceFileChange(e, 'licence')}
+                    className="w-full px-2.5 py-1.5 rounded-xl border border-[#E2DED3] text-xs text-stone-600 bg-stone-50"
                   />
+                  {licenceFileName && (
+                    <span className="text-[10px] text-emerald-700 font-mono block mt-1 truncate">
+                      {licenceFileName}
+                    </span>
+                  )}
                 </div>
                 <div>
                   <label className="block text-stone-700 font-semibold mb-1">
-                    Business Registration File
+                    Business Registration (verification-docs)
                   </label>
                   <input
-                    type="text"
-                    value={businessRegFileName}
-                    onChange={(e) => setBusinessRegFileName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-[#E2DED3] text-xs font-mono text-stone-600 bg-stone-50"
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg"
+                    disabled={isUploadingDoc}
+                    onChange={(e) => void handleLicenceFileChange(e, 'registration')}
+                    className="w-full px-2.5 py-1.5 rounded-xl border border-[#E2DED3] text-xs text-stone-600 bg-stone-50"
                   />
+                  {businessRegFileName && (
+                    <span className="text-[10px] text-emerald-700 font-mono block mt-1 truncate">
+                      {businessRegFileName}
+                    </span>
+                  )}
                 </div>
               </div>
 

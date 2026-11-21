@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { UserCheck, ShieldCheck, Clock, Menu, X, ChevronRight, ChevronDown, LogOut, MessageSquare } from 'lucide-react';
-import { RoleSwitcherModal } from './RoleSwitcherModal';
 import { LegalModal } from './LegalModal';
 import { TravelerProfileModal } from './TravelerProfileModal';
 import { TravelerBidsFollowUpsModal } from './TravelerBidsFollowUpsModal';
@@ -21,7 +20,6 @@ export const Navbar: React.FC = () => {
     openAuthPrompt,
   } = useApp();
 
-  const [roleModalOpen, setRoleModalOpen] = useState(false);
   const [legalModalOpen, setLegalModalOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -510,26 +508,9 @@ export const Navbar: React.FC = () => {
               </div>
             )}
 
-            <div className="pt-2 border-t border-safari-dusk-dark">
-              <button
-                onClick={() => {
-                  setRoleModalOpen(true);
-                  setMobileMenuOpen(false);
-                }}
-                className="w-full py-2 text-xs text-desert-atlas hover:text-white font-medium text-left"
-              >
-                Switch Role / Persona &rarr;
-              </button>
-            </div>
           </div>
         )}
       </header>
-
-      {/* Role Switcher Modal */}
-      <RoleSwitcherModal
-        isOpen={roleModalOpen}
-        onClose={() => setRoleModalOpen(false)}
-      />
 
       {/* Legal & Terms Modal */}
       <LegalModal

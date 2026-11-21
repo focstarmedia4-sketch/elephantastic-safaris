@@ -80,13 +80,20 @@ export const PostRequestPage: React.FC = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
     const trimmedCountry = countryOfOrigin.trim();
     if (!trimmedCountry) {
       setFormError('Please enter your Country of Origin before publishing your request.');
+      return;
+    }
+
+    if (!budget || Number(budget) <= 0) {
+      setFormError('Please enter a required Budget (USD) greater than 0.');
       return;
     }
 
@@ -106,17 +113,27 @@ export const PostRequestPage: React.FC = () => {
       }
     }
 
-    const newId = createTravelRequest({
+    const destination =
+      category === 'safari'
+        ? selectedParks.join(', ')
+        : category === 'hotel'
+          ? hotelDestination.trim()
+          : bnbNeighbourhood.trim();
+
+    setIsSubmitting(true);
+    const result = await createTravelRequest({
       category,
       title: defaultTitle,
+      destination,
       traveler_country: trimmedCountry,
       start_date: startDate,
       end_date: endDate,
       flexible_month: flexibleMonth || undefined,
       adults,
       children,
-      budget,
-      currency,
+      budget: Number(budget),
+      budget_usd: Number(budget),
+      currency: 'USD',
       notes: notes || 'Looking forward to receiving competitive quotes from verified Kenyan operators.',
       whatsapp_number: whatsappNumber.trim(),
       call_number: (sameAsWhatsapp ? whatsappNumber : callNumber).trim(),
@@ -156,9 +173,15 @@ export const PostRequestPage: React.FC = () => {
             }
           : undefined,
     });
+    setIsSubmitting(false);
+
+    if (!result.success || !result.id) {
+      setFormError(result.error || 'Failed to publish travel request.');
+      return;
+    }
 
     // Navigate to request detail
-    setActiveTab('traveler-request-detail', newId);
+    setActiveTab('traveler-request-detail', result.id);
   };
 
   if (!currentUser) {
@@ -320,15 +343,16 @@ export const PostRequestPage: React.FC = () => {
 
             <div>
               <label className="block text-xs font-medium text-stone-700 mb-1">
-                Total Target Budget
+                Budget (USD) *
               </label>
               <input
                 type="number"
-                min={100}
+                min={1}
                 step={50}
                 required
                 value={budget}
                 onChange={(e) => setBudget(Number(e.target.value))}
+                placeholder="e.g. 3500"
                 className="w-full text-sm rounded-lg border border-stone-300 px-3 py-2 bg-white text-stone-900 font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-highlight-accent/20 focus:border-highlight-accent"
               />
             </div>
@@ -840,9 +864,10 @@ export const PostRequestPage: React.FC = () => {
           </button>
           <button
             type="submit"
-            className="px-6 py-3 text-xs font-bold text-white bg-highlight-accent hover:bg-highlight-accent-hover rounded-xl shadow-xs transition-colors"
+            disabled={isSubmitting}
+            className="px-6 py-3 text-xs font-bold text-white bg-highlight-accent hover:bg-highlight-accent-hover disabled:opacity-60 rounded-xl shadow-xs transition-colors cursor-pointer"
           >
-            Publish Request (Free)
+            {isSubmitting ? 'Publishing...' : 'Publish Request (Free)'}
           </button>
         </div>
       </form>

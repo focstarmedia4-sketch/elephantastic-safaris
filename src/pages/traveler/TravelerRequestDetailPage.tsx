@@ -48,6 +48,7 @@ export const TravelerRequestDetailPage: React.FC = () => {
     reviewOperator,
     getTravelerUnlockNotifications,
     getEligibleReviewOperators,
+    getListingUnlockInfo,
     operators,
     unlocks,
     setActiveTab,
@@ -109,14 +110,14 @@ export const TravelerRequestDetailPage: React.FC = () => {
   }
 
   const allBids = getBidsForRequest(request.id);
-  const paidUnlocks = unlocks.filter((u) => u.request_id === request.id && u.status === 'paid');
-  const unlockLimit = request.unlock_limit || request.slot_limit || 30;
-  const unlocksPaidCount = paidUnlocks.length;
-  const unlocksLeft = Math.max(0, unlockLimit - unlocksPaidCount);
-  const unlockPercentage = (unlocksPaidCount / unlockLimit) * 100;
-  const isUnlocksFull = unlocksPaidCount >= unlockLimit;
-  const isUnlocksNearFull = unlockPercentage >= 80;
-  const isUnlocksDisabled = request.unlocks_enabled === false || request.bids_only === true;
+  const rpcUnlockInfo = getListingUnlockInfo(request.id);
+  const unlockLimit = rpcUnlockInfo.total;
+  const unlocksPaidCount = rpcUnlockInfo.paidCount;
+  const unlocksLeft = rpcUnlockInfo.remaining;
+  const unlockPercentage = unlockLimit > 0 ? (unlocksPaidCount / unlockLimit) * 100 : 0;
+  const isUnlocksFull = rpcUnlockInfo.isFull;
+  const isUnlocksNearFull = true; // Rule 3: Traveller can raise unlock_limit
+  const isUnlocksDisabled = rpcUnlockInfo.bidsOnly;
 
   const daysLeft = (() => {
     const diff = new Date(request.expires_at).getTime() - Date.now();
@@ -160,93 +161,70 @@ export const TravelerRequestDetailPage: React.FC = () => {
     }
   });
 
-  // Server-authoritative check for control actions
-  const verifyServerControl = async (action: string, extra: Record<string, any> = {}): Promise<boolean> => {
-    try {
-      const res = await fetch('/api/traveler/request-control', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: currentUser?.id || request.traveler_id,
-          traveler_id: request.traveler_id,
-          action,
-          request_id: request.id,
-          bid_count: allBids.length,
-          unlock_count: unlocksPaidCount,
-          ...extra,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        setServerNotice({ type: 'error', text: data.message || 'Action forbidden by server policy.' });
-        setTimeout(() => setServerNotice(null), 5000);
-        return false;
-      }
-      return true;
-    } catch {
-      return true;
-    }
-  };
-
   const executeAddUnlocks = async (add: 10 | 20) => {
-    const ok = await verifyServerControl('add_unlocks', { additional_unlocks: add });
-    if (ok) {
-      addRequestUnlocks(request.id, add);
+    const res = await addRequestUnlocks(request.id, add);
+    if (res.success) {
       setServerNotice({
         type: 'success',
         text: `Increased unlock capacity from ${unlockLimit} to ${unlockLimit + add}.`,
       });
-      setTimeout(() => setServerNotice(null), 5000);
       setUnlocksConfirm(null);
+    } else {
+      setServerNotice({ type: 'error', text: res.error || 'Failed to update unlock_limit.' });
     }
+    setTimeout(() => setServerNotice(null), 6000);
   };
 
   const handleToggleUnlocking = async () => {
     const nextState = !request.unlocks_enabled;
-    const ok = await verifyServerControl('toggle_unlocks', { unlocks_enabled: nextState });
-    if (ok) {
-      toggleRequestUnlocks(request.id);
+    const res = await toggleRequestUnlocks(request.id);
+    if (res.success) {
       setServerNotice({
         type: 'success',
         text: nextState
           ? 'Contact unlocking allowed. Operators can now unlock your contact.'
           : 'Contact unlocking stopped. New unlocks are paused; operators can bid only.',
       });
-      setTimeout(() => setServerNotice(null), 5000);
+    } else {
+      setServerNotice({ type: 'error', text: res.error || 'Failed to update unlocking_enabled.' });
     }
+    setTimeout(() => setServerNotice(null), 6000);
   };
 
   const executeExtendTime = async (days: 3 | 7) => {
-    const ok = await verifyServerControl('extend_time', { additional_days: days });
-    if (ok) {
-      extendRequestTime(request.id, days);
+    const res = await extendRequestTime(request.id, days);
+    if (res.success) {
       setServerNotice({ type: 'success', text: `Enquiry extended by +${days} days.` });
-      setTimeout(() => setServerNotice(null), 5000);
       setTimeConfirm(null);
+    } else {
+      setServerNotice({ type: 'error', text: res.error || 'Failed to update expires_at.' });
     }
+    setTimeout(() => setServerNotice(null), 6000);
   };
 
   const executeCloseEnquiry = async () => {
-    const ok = await verifyServerControl('close_enquiry');
-    if (ok) {
-      closeRequestEarly(request.id, 'Operators will no longer be able to bid or unlock your contact. You can still see all bids.');
+    const res = await closeRequestEarly(request.id);
+    if (res.success) {
       setServerNotice({
         type: 'success',
         text: 'Enquiry closed. Operators will no longer be able to bid or unlock your contact. You can still see all bids.',
       });
-      setTimeout(() => setServerNotice(null), 6000);
       setCloseConfirm(false);
+    } else {
+      setServerNotice({ type: 'error', text: res.error || 'Failed to close request.' });
     }
+    setTimeout(() => setServerNotice(null), 6000);
   };
 
   const executeReopenRequest = async () => {
-    const ok = await verifyServerControl('reopen_request');
-    if (ok) {
-      reopenRequest(request.id);
+    const res = await reopenRequest(request.id);
+    if (res.success) {
       setServerNotice({ type: 'success', text: 'Enquiry reopened. Operators can resume bidding and unlocking contact.' });
-      setTimeout(() => setServerNotice(null), 5000);
       setReopenConfirm(false);
+    } else {
+      setServerNotice({ type: 'error', text: res.error || 'Failed to reopen request.' });
     }
+    setTimeout(() => setServerNotice(null), 6000);
   };
 
   const openEditModal = () => {
@@ -259,7 +237,7 @@ export const TravelerRequestDetailPage: React.FC = () => {
     }
     setEditTitle(request.title);
     setEditBudget(request.budget);
-    setEditCurrency(request.currency);
+    setEditCurrency('USD');
     setEditStartDate(request.start_date);
     setEditEndDate(request.end_date);
     setEditAdults(request.adults);
@@ -270,32 +248,30 @@ export const TravelerRequestDetailPage: React.FC = () => {
 
   const executeEditRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    const ok = await verifyServerControl('edit_request');
-    if (ok) {
-      const success = editTravelRequest(request.id, {
-        title: editTitle.trim(),
-        budget: Number(editBudget),
-        currency: editCurrency,
-        budget_usd: editCurrency === 'USD' ? Number(editBudget) : Math.round(Number(editBudget) / 130),
-        start_date: editStartDate,
-        end_date: editEndDate,
-        adults: Number(editAdults),
-        children: Number(editChildren),
-        notes: editNotes.trim(),
-      });
-      if (success) {
-        setServerNotice({ type: 'success', text: 'Listing details updated successfully.' });
-        setTimeout(() => setServerNotice(null), 4000);
-        setEditModalOpen(false);
-      }
+    const res = await editTravelRequest(request.id, {
+      title: editTitle.trim(),
+      budget: Number(editBudget),
+      currency: 'USD',
+      budget_usd: Number(editBudget),
+      start_date: editStartDate,
+      end_date: editEndDate,
+      adults: Number(editAdults),
+      children: Number(editChildren),
+      notes: editNotes.trim(),
+    });
+    if (res.success) {
+      setServerNotice({ type: 'success', text: 'Listing details updated successfully.' });
+      setEditModalOpen(false);
+    } else {
+      setServerNotice({ type: 'error', text: res.error || 'Failed to update request.' });
     }
+    setTimeout(() => setServerNotice(null), 6000);
   };
 
   const executeMarkBooked = async () => {
     if (!selectedBookedOperatorId) return;
-    const ok = await verifyServerControl('mark_booked', { booked_operator_id: selectedBookedOperatorId });
-    if (ok) {
-      markRequestBooked(request.id, selectedBookedOperatorId);
+    const res = await markRequestBooked(request.id, selectedBookedOperatorId);
+    if (res.success) {
       const bookedOp = operators.find((o) => o.id === selectedBookedOperatorId);
       setBookingModalOpen(false);
       if (bookedOp) {
@@ -303,10 +279,12 @@ export const TravelerRequestDetailPage: React.FC = () => {
       }
       setServerNotice({
         type: 'success',
-        text: 'Request marked as booked! You can now rate and review this operator.',
+        text: 'Request marked as booked!',
       });
-      setTimeout(() => setServerNotice(null), 5000);
+    } else {
+      setServerNotice({ type: 'error', text: res.error || 'Failed to mark request as booked.' });
     }
+    setTimeout(() => setServerNotice(null), 6000);
   };
 
   const handleSubmitReview = (e: React.FormEvent) => {
@@ -917,45 +895,51 @@ export const TravelerRequestDetailPage: React.FC = () => {
                       </div>
 
                       <div className="grid grid-cols-1 gap-1.5 text-xs">
-                        {(bid.operator_whatsapp || '+254 722 456 789') && (
+                        {(bid.operator_whatsapp || bid.operator_phone) && (
                           <a
-                            href={`https://wa.me/${(bid.operator_whatsapp || '+254722456789').replace(/[^0-9]/g, '')}`}
+                            href={`https://wa.me/${(bid.operator_whatsapp || bid.operator_phone || '').replace(/[^0-9]/g, '')}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-white border border-emerald-200 text-[#1E5B43] hover:bg-emerald-50 transition-colors font-medium min-h-[36px]"
                           >
                             <span className="flex items-center gap-1.5 truncate">
                               <MessageCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                              <span>WhatsApp: <strong>{bid.operator_whatsapp || '+254 722 456 789'}</strong></span>
+                              <span>WhatsApp: <strong>{bid.operator_whatsapp || bid.operator_phone}</strong></span>
                             </span>
                             <span className="text-[11px] font-bold underline shrink-0">Chat &rarr;</span>
                           </a>
                         )}
 
-                        {(bid.operator_phone || '+254 722 456 789') && (
+                        {bid.operator_phone && (
                           <a
-                            href={`tel:${bid.operator_phone || '+254722456789'}`}
+                            href={`tel:${bid.operator_phone}`}
                             className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-white border border-emerald-200 text-stone-800 hover:bg-stone-50 transition-colors font-medium min-h-[36px]"
                           >
                             <span className="flex items-center gap-1.5 truncate">
                               <PhoneCall className="w-3.5 h-3.5 text-[#1E5B43] shrink-0" />
-                              <span>Call: <strong>{bid.operator_phone || '+254 722 456 789'}</strong></span>
+                              <span>Call: <strong>{bid.operator_phone}</strong></span>
                             </span>
                             <span className="text-[11px] font-bold underline text-[#1E5B43] shrink-0">Call &rarr;</span>
                           </a>
                         )}
 
-                        {(bid.operator_email || 'operator@safari-stays.com') && (
+                        {bid.operator_email && (
                           <a
-                            href={`mailto:${bid.operator_email || 'operator@safari-stays.com'}`}
+                            href={`mailto:${bid.operator_email}`}
                             className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-white border border-emerald-200 text-stone-800 hover:bg-stone-50 transition-colors font-medium min-h-[36px]"
                           >
                             <span className="flex items-center gap-1.5 truncate">
                               <Mail className="w-3.5 h-3.5 text-[#1E5B43] shrink-0" />
-                              <span className="truncate">Email: <strong>{bid.operator_email || 'operator@safari-stays.com'}</strong></span>
+                              <span className="truncate">Email: <strong>{bid.operator_email}</strong></span>
                             </span>
                             <span className="text-[11px] font-bold underline text-[#1E5B43] shrink-0">Email &rarr;</span>
                           </a>
+                        )}
+
+                        {!bid.operator_phone && !bid.operator_whatsapp && !bid.operator_email && (
+                          <p className="text-xs text-stone-500 italic">
+                            Operator contact details not provided in profile yet.
+                          </p>
                         )}
                       </div>
                     </div>

@@ -54,14 +54,14 @@ export const OperatorSignupPage: React.FC = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     if (!acceptedTerms) {
       setError('Please accept the Terms of Use to complete your business registration.');
       return;
     }
-    registerOperator({
+    const res = await registerOperator({
       business_name: businessName,
       contact_name: contactName,
       phone,
@@ -69,10 +69,14 @@ export const OperatorSignupPage: React.FC = () => {
       categories,
       regions,
     });
+    if (!res.success) {
+      setError(res.error || 'Failed to save operator profile in Supabase.');
+      return;
+    }
     setSubmitted(true);
     setTimeout(() => {
       setActiveTab('operator-open-requests');
-    }, 500);
+    }, 300);
   };
 
   const handleGoogleOperatorSignup = async (e: React.MouseEvent<HTMLButtonElement>) => {

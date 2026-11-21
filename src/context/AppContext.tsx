@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react';
 import { supabase } from '../supabaseClient';
 import {
   User,
@@ -18,46 +18,27 @@ import {
   PassHistoryItem,
   ContactUnlockRecord,
   AdminMarketplaceSettings,
-  UnlockTier,
   TravelerUnlockNotification,
 } from '../types';
-import {
-  SEED_USERS,
-  SEED_OPERATORS,
-  SEED_REQUESTS,
-  SEED_BIDS,
-  SEED_CONTACT_SHARES,
-  SEED_PAYMENTS,
-  SEED_REVIEWS,
-  SEED_REPORTS,
-  SEED_BLOG_POSTS,
-  SEED_BOOKMARKS,
-  SEED_UNLOCKS,
-  SEED_ADMIN_SETTINGS,
-} from '../data/seedData';
-import { IMAGES } from '../assets/images';
+import { SEED_BLOG_POSTS, SEED_ADMIN_SETTINGS } from '../data/seedData';
 import { getPathForTab, parseLocationToTab, getPageTitleForTab } from '../utils/routes';
 import {
-  loadMarketplaceData,
-  loadUserDatabaseData,
-  getAuthenticatedUserId,
-  upsertProfileInDb,
-  createTravelRequestInDb,
-  updateTravelRequestInDb,
-  deleteTravelRequestInDb,
-  upsertOperatorInDb,
-  updateOperatorInDb,
-  createBidInDb,
-  updateBidInDb,
-  createBookmarkInDb,
-  deleteBookmarkInDb,
-  createContactUnlockInDb,
-  createPaymentInDb,
-  createReviewInDb,
-  createBlogPostInDb,
-  deleteBlogPostInDb,
-  createReportInDb,
-  updateReportStatusInDb,
+  OperatorPassRecord,
+  loadPublicSupabaseData,
+  loadAuthenticatedSupabaseState,
+  createRequestWithContactsInDb,
+  updateRequestInDb,
+  insertBidInDb,
+  upsertOperatorProfileInDb,
+  updateProfileInDb,
+  addBookmarkInDb,
+  removeBookmarkInDb,
+  fetchRequestContactFromDb,
+  uploadVerificationDocToStorage,
+  invokeMpesaPaymentEdgeFunction,
+  mapSettingsToAdminConfig,
+  rpcUnlocksUsed,
+  rpcUnlockFeeKsh,
 } from '../services/supabaseData';
 
 interface SlotInfo {
@@ -67,6 +48,12 @@ interface SlotInfo {
   isLocked: boolean;
 }
 
+export interface ActionResult {
+  success: boolean;
+  id?: string;
+  error?: string;
+}
+
 interface AppContextType {
   currentUser: User | null;
   currentOperator: Operator | null;
@@ -74,6 +61,7 @@ interface AppContextType {
   operators: Operator[];
   requests: TravelRequest[];
   bids: Bid[];
+  passes: OperatorPassRecord[];
   contactShares: ContactShare[];
   payments: PaymentRecord[];
   reviews: Review[];
@@ -82,27 +70,27 @@ interface AppContextType {
   bookmarks: Bookmark[];
   unlocks: ContactUnlockRecord[];
   adminSettings: AdminMarketplaceSettings;
+  isLoadingData: boolean;
+  supabaseError: string | null;
+  clearSupabaseError: () => void;
+  refreshData: () => Promise<void>;
 
-  // Bookmarks
-  toggleBookmark: (requestId: string) => void;
+  // Bookmarks (Supabase `bookmarks`)
+  toggleBookmark: (requestId: string) => Promise<void>;
   isBookmarked: (requestId: string) => boolean;
-  
-  // Blog Actions
+
+  // Blog (static editorial guides)
   createBlogPost: (data: Omit<BlogPost, 'id' | 'slug' | 'published_at'>) => string;
   deleteBlogPost: (id: string) => void;
   getBlogPostBySlug: (slug: string) => BlogPost | undefined;
-  
-  // Navigation & UI state
+
+  // Navigation & URL state
   activeTab: string;
   setActiveTab: (tab: string, param?: string) => void;
   tabParam: string | null;
-  
-  // User Management & Role Switcher
-  switchUser: (userId: string) => void;
-  loginUser: (email: string, role: UserRole, name: string, country: string, password?: string, authUserId?: string) => void;
-  registerUser: (data: { email: string; password?: string; role: UserRole; name: string; country: string }) => { success: boolean; message?: string };
-  loginWithCredentials: (email: string, password?: string) => { success: boolean; message?: string };
-  logoutUser: () => void;
+
+  // Auth (Supabase Auth session only)
+  logoutUser: () => Promise<void>;
   authPrompt: {
     isOpen: boolean;
     role: UserRole;
@@ -112,17 +100,19 @@ interface AppContextType {
   } | null;
   openAuthPrompt: (role?: UserRole, destinationTab?: string, destinationParam?: string, reason?: string) => void;
   closeAuthPrompt: () => void;
-  
-  // Traveler Actions
+
+  // Traveller Actions (Supabase `requests` + `request_contacts`)
   createTravelRequest: (data: {
     category: TravelCategory;
     title: string;
+    destination?: string;
     start_date: string;
     end_date: string;
     flexible_month?: string;
     adults: number;
     children: number;
     budget: number;
+    budget_usd?: number;
     currency: Currency;
     notes: string;
     safari_details?: any;
@@ -134,27 +124,26 @@ interface AppContextType {
     preferred_contact_method?: 'whatsapp' | 'email' | 'phone';
     preferred_contact_methods?: ('whatsapp' | 'email' | 'phone')[];
     traveler_country?: string;
-  }) => string; // returns new request ID
-  extendRequestSlots: (requestId: string, additionalSlots: 10 | 20) => void;
-  addRequestUnlocks: (requestId: string, additionalUnlocks: 10 | 20) => void;
-  toggleRequestUnlocks: (requestId: string) => void;
-  extendRequestTime: (requestId: string, additionalDays: 3 | 7) => void;
-  closeRequestEarly: (requestId: string, reason?: string) => void;
-  reopenRequest: (requestId: string) => void;
+  }) => Promise<ActionResult>;
+  extendRequestSlots: (requestId: string, additionalSlots: 10 | 20) => Promise<ActionResult>;
+  addRequestUnlocks: (requestId: string, additionalUnlocks: 10 | 20) => Promise<ActionResult>;
+  toggleRequestUnlocks: (requestId: string) => Promise<ActionResult>;
+  extendRequestTime: (requestId: string, additionalDays: 3 | 7) => Promise<ActionResult>;
+  closeRequestEarly: (requestId: string, reason?: string) => Promise<ActionResult>;
+  reopenRequest: (requestId: string) => Promise<ActionResult>;
   shareContactWithOperator: (requestId: string, operatorId: string, contact: TravelerContact) => void;
   shortlistBid: (bidId: string) => void;
   declineBid: (bidId: string) => void;
   reviewOperator: (operatorId: string, requestId: string, rating: number, comment: string, tripType: string) => void;
   canEditRequest: (requestId: string) => { allowed: boolean; reason?: string };
-  editTravelRequest: (requestId: string, updates: Partial<TravelRequest>) => boolean;
-  deleteTravelRequest: (requestId: string) => void;
-  repostRequest: (requestId: string) => string;
-  markRequestBooked: (requestId: string, operatorId: string) => void;
-  updateTravelerProfile: (data: { name: string; country: string; phone?: string; preferred_currency?: Currency }) => void;
+  editTravelRequest: (requestId: string, updates: Partial<TravelRequest>) => Promise<ActionResult>;
+  repostRequest: (requestId: string) => Promise<ActionResult>;
+  markRequestBooked: (requestId: string, operatorId: string) => Promise<ActionResult>;
+  updateTravelerProfile: (data: { name: string; country?: string; phone?: string; preferred_currency?: Currency }) => Promise<ActionResult>;
   getTravelerUnlockNotifications: (travelerId: string) => TravelerUnlockNotification[];
   getEligibleReviewOperators: (requestId: string) => Operator[];
-  
-  // Operator Actions
+
+  // Operator Actions (Supabase `operator_profiles`, `bids`, `verification-docs` storage)
   registerOperator: (data: {
     business_name: string;
     contact_name: string;
@@ -164,9 +153,8 @@ interface AppContextType {
     regions: string[];
     description?: string;
     licence_number?: string;
-    licence_file_name?: string;
-    business_registration_file_name?: string;
-  }) => void;
+    verification_requested?: boolean;
+  }) => Promise<ActionResult>;
   updateOperatorProfile: (data: {
     business_name: string;
     contact_name: string;
@@ -178,7 +166,9 @@ interface AppContextType {
     licence_number?: string;
     licence_file_name?: string;
     business_registration_file_name?: string;
-  }) => void;
+    verification_requested?: boolean;
+  }) => Promise<ActionResult>;
+  uploadLicenceDocument: (file: File) => Promise<{ success: boolean; path?: string; error?: string }>;
   isProfileComplete: (operator: Operator | null) => boolean;
   submitMpesaPayment: (
     operatorId: string,
@@ -197,7 +187,7 @@ interface AppContextType {
     operator_email?: string;
     operator_whatsapp?: string;
     operator_phone?: string;
-  }) => { success: boolean; error?: string };
+  }) => Promise<{ success: boolean; error?: string }>;
   getPassHistory: (operatorId: string) => PassHistoryItem[];
   verifyPassOnServer: (operatorId: string) => Promise<{
     active: boolean;
@@ -207,13 +197,11 @@ interface AppContextType {
     label: string;
     expiresAt: string | null;
   }>;
-  
-  // Admin Actions
+
+  // Admin & Reporting stubs (read-only / error-reporting)
   adminApproveOperator: (operatorId: string) => void;
   adminRejectOperator: (operatorId: string, reason: string) => void;
   adminResolveReport: (reportId: string, status: 'resolved' | 'dismissed') => void;
-  
-  // Trust & Safety
   reportTarget: (data: {
     target_type: 'operator' | 'bid' | 'request';
     target_id: string;
@@ -222,23 +210,44 @@ interface AppContextType {
     details: string;
   }) => void;
 
-  // Helpers
+  // Helpers (driven by Supabase data & RPCs)
   getSlotInfo: (requestId: string) => SlotInfo;
   getBidsForRequest: (requestId: string) => Bid[];
   isPassActive: (operator: Operator | null) => boolean;
   isBiddingPassActive: (operator: Operator | null) => boolean;
   isContactPassActive: (operator: Operator | null) => boolean;
   getPassTimeRemaining: (operator: Operator | null) => { active: boolean; label: string; hoursLeft: number };
-  getBiddingPassTimeRemaining: (operator: Operator | null) => { active: boolean; label: string; hoursLeft: number; expiresAt: string | null };
-  getContactPassTimeRemaining: (operator: Operator | null) => { active: boolean; label: string; hoursLeft: number; expiresAt: string | null };
+  getBiddingPassTimeRemaining: (operator: Operator | null) => {
+    active: boolean;
+    label: string;
+    hoursLeft: number;
+    minutesLeft: number;
+    expiresAt: string | null;
+  };
+  getContactPassTimeRemaining: (operator: Operator | null) => {
+    active: boolean;
+    label: string;
+    hoursLeft: number;
+    expiresAt: string | null;
+  };
   getContactShare: (requestId: string, operatorId: string) => ContactShare | undefined;
-  
-  // Unlocks & Pricing
+
+  // Unlocks & Pricing (Supabase RPCs `unlock_fee_ksh` & `unlocks_used`, `request_contacts` RLS)
   calculateUnlockFee: (request: TravelRequest) => { feeKsh: number; tierLabel: string };
-  getListingUnlockInfo: (requestId: string) => { paidCount: number; remaining: number; isFull: boolean; total: number; bidsOnly: boolean };
+  getListingUnlockInfo: (requestId: string) => {
+    paidCount: number;
+    remaining: number;
+    isFull: boolean;
+    total: number;
+    bidsOnly: boolean;
+  };
   isContactUnlocked: (requestId: string, operatorId: string) => boolean;
   getUnlockedContact: (requestId: string, operatorId: string) => TravelerContact | undefined;
-  startUnlockHold: (requestId: string, operatorId: string) => Promise<{ success: boolean; holdId?: string; feeKsh?: number; error?: string; heldUntil?: string }>;
+  fetchRequestContactDetails: (requestId: string) => Promise<TravelerContact | null>;
+  startUnlockHold: (
+    requestId: string,
+    operatorId: string
+  ) => Promise<{ success: boolean; holdId?: string; feeKsh?: number; error?: string; heldUntil?: string }>;
   cancelUnlockHold: (holdId: string, operatorId: string, reason?: string) => Promise<void>;
   confirmUnlockPayment: (data: {
     holdId?: string;
@@ -249,127 +258,65 @@ interface AppContextType {
     simulateLatePaymentFull?: boolean;
     requestTitle?: string;
     requestCategory?: TravelCategory;
-  }) => Promise<{ success: boolean; message: string; refunded?: boolean; notCharged?: boolean; unlock?: ContactUnlockRecord }>;
-  payBiddingPass: (operatorId: string, phoneNumber: string, simulateFailure?: boolean) => Promise<{ success: boolean; message: string; notCharged?: boolean }>;
+  }) => Promise<{
+    success: boolean;
+    message: string;
+    refunded?: boolean;
+    notCharged?: boolean;
+    unlock?: ContactUnlockRecord;
+  }>;
+  payBiddingPass: (
+    operatorId: string,
+    phoneNumber: string,
+    simulateFailure?: boolean
+  ) => Promise<{ success: boolean; message: string; notCharged?: boolean }>;
   updateAdminSettings: (updates: Partial<AdminMarketplaceSettings>) => void;
-  resetAllData: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const STORAGE_PREFIX = 'safari_stays_v1_';
-
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  // Load or initialize state
-  const [allUsers, setAllUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}users`);
-    return saved ? JSON.parse(saved) : SEED_USERS;
-  });
+  // All database-backed state starts empty and is hydrated strictly from Supabase (NO localStorage / sessionStorage / seed DB data)
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentOperator, setCurrentOperator] = useState<Operator | null>(null);
+  const [operators, setOperators] = useState<Operator[]>([]);
+  const [requests, setRequests] = useState<TravelRequest[]>([]);
+  const [bids, setBids] = useState<Bid[]>([]);
+  const [passes, setPasses] = useState<OperatorPassRecord[]>([]);
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [unlocks, setUnlocks] = useState<ContactUnlockRecord[]>([]);
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+  const [requestContactsByRequestId, setRequestContactsByRequestId] = useState<
+    Record<string, TravelerContact>
+  >({});
+  const [unlocksUsedByRequestId, setUnlocksUsedByRequestId] = useState<Record<string, number>>({});
+  const [unlockFeeKshByRequestId, setUnlockFeeKshByRequestId] = useState<Record<string, number>>({});
+  const [adminSettings, setAdminSettings] = useState<AdminMarketplaceSettings>(SEED_ADMIN_SETTINGS);
 
-  const [currentUserId, setCurrentUserId] = useState<string | null>(() => {
-    // Clear demo user auto-login so users are logged out as requested
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}current_user_id`);
-    if (saved === 'user_traveler_1' || saved === 'user_operator_1' || !saved) {
-      localStorage.removeItem(`${STORAGE_PREFIX}current_user_id`);
-      return null;
+  // Non-DB editorial blog posts
+  const [blogPosts] = useState<BlogPost[]>(SEED_BLOG_POSTS);
+  const [reviews] = useState<Review[]>([]);
+  const [reports] = useState<FlaggedReport[]>([]);
+  const [contactShares] = useState<ContactShare[]>([]);
+
+  const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
+  const [supabaseError, setSupabaseError] = useState<string | null>(null);
+
+  const clearSupabaseError = useCallback(() => setSupabaseError(null), []);
+
+  const reportError = useCallback((msg: string | null) => {
+    if (msg) {
+      console.error('[Supabase Error]', msg);
+      setSupabaseError(msg);
     }
-    return saved;
-  });
+  }, []);
 
-  const [operators, setOperators] = useState<Operator[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}operators`);
-    return saved ? JSON.parse(saved) : SEED_OPERATORS;
-  });
-
-  const [requests, setRequests] = useState<TravelRequest[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}requests`);
-    return saved ? JSON.parse(saved) : SEED_REQUESTS;
-  });
-
-  const [bids, setBids] = useState<Bid[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}bids`);
-    return saved ? JSON.parse(saved) : SEED_BIDS;
-  });
-
-  const [contactShares, setContactShares] = useState<ContactShare[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}contact_shares`);
-    return saved ? JSON.parse(saved) : SEED_CONTACT_SHARES;
-  });
-
-  const [payments, setPayments] = useState<PaymentRecord[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}payments`);
-    return saved ? JSON.parse(saved) : SEED_PAYMENTS;
-  });
-
-  const [reviews, setReviews] = useState<Review[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}reviews`);
-    return saved ? JSON.parse(saved) : SEED_REVIEWS;
-  });
-
-  const [reports, setReports] = useState<FlaggedReport[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}reports`);
-    return saved ? JSON.parse(saved) : SEED_REPORTS;
-  });
-
-  const [blogPosts, setBlogPosts] = useState<BlogPost[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}blog_posts_v4`);
-    if (!saved) return SEED_BLOG_POSTS;
-    const parsed: BlogPost[] = JSON.parse(saved);
-    const seedById = new Map(SEED_BLOG_POSTS.map((p) => [p.id, p]));
-    const legacyAssetMap: Record<string, string> = {
-      'safari_tour_card_1794323355207.jpg': IMAGES.safariTours,
-      'hotel_lodge_card_1794323356040.jpg': IMAGES.hotelLodge,
-      'bnb_villa_card_1794323357592.jpg': IMAGES.bnbVilla,
-      'blog_mara_migration_1794325893622.jpg': IMAGES.blogMara,
-      'blog_diani_dhow_coast_1794325893839.jpg': IMAGES.blogDiani,
-      'blog_mount_kenya_peaks_1794325893931.jpg': IMAGES.blogMountKenya,
-      'blog_bush_camp_1794996241796.jpg': IMAGES.blogBushCamp,
-      'blog_nyama_choma_1794996243727.jpg': IMAGES.blogNyamaChoma,
-      'blog_kenya_guides_1794996242266.jpg': IMAGES.blogKenyaGuides,
-      'blog_hidden_gems_1794996922161.jpg': IMAGES.blogHiddenGems,
-      'blog_kenyan_culture_1794996923091.jpg': IMAGES.blogKenyanCulture,
-      'blog_romantic_kenya_1794996923892.jpg': IMAGES.blogRomanticKenya,
-      'blog_rift_valley_1794996921433.jpg': IMAGES.blogRiftValley,
-    };
-
-    return parsed.map((post) => {
-      if (post.image_url.startsWith('/src/assets/images/')) {
-        const seedMatch = seedById.get(post.id);
-        if (seedMatch) {
-          return { ...post, image_url: seedMatch.image_url };
-        }
-        const filename = post.image_url.split('/').pop() || '';
-        return { ...post, image_url: legacyAssetMap[filename] || IMAGES.blogMara };
-      }
-      return post;
-    });
-  });
-
-  const [bookmarks, setBookmarks] = useState<Bookmark[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}bookmarks`);
-    return saved ? JSON.parse(saved) : SEED_BOOKMARKS;
-  });
-
-  const [unlocks, setUnlocks] = useState<ContactUnlockRecord[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}unlocks`);
-    return saved ? JSON.parse(saved) : SEED_UNLOCKS;
-  });
-
-  const [adminSettings, setAdminSettings] = useState<AdminMarketplaceSettings>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}admin_settings`);
-    return saved ? JSON.parse(saved) : SEED_ADMIN_SETTINGS;
-  });
-
-  const updateAdminSettings = (updates: Partial<AdminMarketplaceSettings>) => {
-    setAdminSettings((prev) => ({ ...prev, ...updates }));
-  };
-
-  // Navigation tab state initialized from the browser URL so shared links open directly to that page
+  // Navigation tab state synced with URL path
   const initialRoute = useMemo(() => parseLocationToTab(window.location.pathname), []);
   const [activeTab, setActiveTabState] = useState<string>(initialRoute.tab);
   const [tabParam, setTabParam] = useState<string | null>(initialRoute.param);
 
-  const setActiveTab = (tab: string, param?: string) => {
+  const setActiveTab = useCallback((tab: string, param?: string) => {
     const resolvedParam = param || null;
     setActiveTabState(tab);
     setTabParam(resolvedParam);
@@ -387,7 +334,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     document.title = getPageTitleForTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  }, []);
 
   useEffect(() => {
     document.title = getPageTitleForTab(activeTab);
@@ -404,7 +351,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Auth Prompt Modal State (prompts user to register or sign up first)
+  // Auth Prompt Modal State
   const [authPrompt, setAuthPrompt] = useState<{
     isOpen: boolean;
     role: UserRole;
@@ -413,232 +360,108 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     reason?: string;
   } | null>(null);
 
-  const openAuthPrompt = (
-    role: UserRole = 'traveler',
-    destinationTab: string = 'traveler-post',
-    destinationParam?: string,
-    reason?: string
-  ) => {
-    setAuthPrompt({
-      isOpen: true,
-      role,
-      destinationTab,
-      destinationParam,
-      reason,
-    });
-  };
-
-  const closeAuthPrompt = () => {
-    setAuthPrompt(null);
-  };
-
-  // Sync to localStorage
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}users`, JSON.stringify(allUsers));
-    if (currentUserId) {
-      localStorage.setItem(`${STORAGE_PREFIX}current_user_id`, currentUserId);
-    } else {
-      localStorage.removeItem(`${STORAGE_PREFIX}current_user_id`);
-    }
-    localStorage.setItem(`${STORAGE_PREFIX}operators`, JSON.stringify(operators));
-    localStorage.setItem(`${STORAGE_PREFIX}requests`, JSON.stringify(requests));
-    localStorage.setItem(`${STORAGE_PREFIX}bids`, JSON.stringify(bids));
-    localStorage.setItem(`${STORAGE_PREFIX}contact_shares`, JSON.stringify(contactShares));
-    localStorage.setItem(`${STORAGE_PREFIX}payments`, JSON.stringify(payments));
-    localStorage.setItem(`${STORAGE_PREFIX}reviews`, JSON.stringify(reviews));
-    localStorage.setItem(`${STORAGE_PREFIX}reports`, JSON.stringify(reports));
-    localStorage.setItem(`${STORAGE_PREFIX}blog_posts_v4`, JSON.stringify(blogPosts));
-    localStorage.setItem(`${STORAGE_PREFIX}bookmarks`, JSON.stringify(bookmarks));
-    localStorage.setItem(`${STORAGE_PREFIX}unlocks`, JSON.stringify(unlocks));
-    localStorage.setItem(`${STORAGE_PREFIX}admin_settings`, JSON.stringify(adminSettings));
-  }, [allUsers, currentUserId, operators, requests, bids, contactShares, payments, reviews, reports, blogPosts, bookmarks, unlocks, adminSettings]);
-
-  const currentUser = useMemo(() => {
-    if (!currentUserId) return null;
-    return allUsers.find((u) => u.id === currentUserId) || null;
-  }, [allUsers, currentUserId]);
-
-  const currentOperator = useMemo(() => {
-    if (!currentUser || currentUser.role !== 'operator') return null;
-    return operators.find((op) => op.user_id === currentUser.id) || null;
-  }, [currentUser, operators]);
-
-  const switchUser = (userId: string) => {
-    if (!userId || userId === 'logout') {
-      logoutUser();
-      return;
-    }
-    const target = allUsers.find((u) => u.id === userId);
-    if (target) {
-      setCurrentUserId(userId);
-      // Auto-navigate to appropriate home if role changes
-      if (target.role === 'traveler') {
-        setActiveTab('traveler-my-requests');
-      } else if (target.role === 'operator') {
-        setActiveTab('operator-dashboard');
-      } else if (target.role === 'admin') {
-        setActiveTab('admin-verification');
-      }
-    }
-  };
-
-  const allUsersRef = React.useRef(allUsers);
-  allUsersRef.current = allUsers;
-  const authUserIdRef = React.useRef<string | null>(null);
-
-  const mergeById = <T extends { id: string }>(remote: T[], fallback: T[]): T[] => {
-    if (remote.length === 0) return fallback;
-    const seen = new Set(remote.map((item) => item.id));
-    return [...remote, ...fallback.filter((item) => !seen.has(item.id))];
-  };
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const hydrateAuthenticatedSession = async (
-      sessionUser: {
-        id: string;
-        email?: string;
-        app_metadata?: Record<string, unknown>;
-        user_metadata?: Record<string, unknown>;
-      } | null
+  const openAuthPrompt = useCallback(
+    (
+      role: UserRole = 'traveler',
+      destinationTab: string = 'traveler-post',
+      destinationParam?: string,
+      reason?: string
     ) => {
-      if (!sessionUser?.id || !sessionUser.email) {
-        authUserIdRef.current = null;
-        return;
-      }
-
-      const authUid = sessionUser.id;
-      authUserIdRef.current = authUid;
-
-      const email = sessionUser.email.trim();
-      const storedRole = localStorage.getItem('elephantastic_oauth_role') as UserRole | null;
-      const fallbackRole: UserRole =
-        storedRole === 'operator' || storedRole === 'traveler' ? storedRole : 'traveler';
-      const displayName =
-        (sessionUser.user_metadata?.full_name as string | undefined) ||
-        (sessionUser.user_metadata?.name as string | undefined) ||
-        email.split('@')[0] ||
-        'Traveler';
-
-      localStorage.setItem('elephantastic_has_registered', 'true');
-      localStorage.removeItem('elephantastic_oauth_role');
-
-      // Load all persisted rows belonging to this authenticated user from Supabase
-      const dbData = await loadUserDatabaseData(authUid);
-      if (!isMounted) return;
-
-      const resolvedRole: UserRole = dbData.profile?.role || fallbackRole;
-      const syncedUser: User = {
-        id: authUid,
-        email,
-        role: resolvedRole,
-        name: dbData.profile?.name || displayName,
-        country: dbData.profile?.country || (resolvedRole === 'operator' ? 'Kenya' : 'United Kingdom'),
-        phone: dbData.profile?.phone,
-        preferred_currency: dbData.profile?.preferred_currency || 'USD',
-        created_at: dbData.profile?.created_at || new Date().toISOString(),
-      };
-
-      if (!dbData.profile) {
-        void upsertProfileInDb(syncedUser);
-      }
-
-      setAllUsers((prev) => {
-        const filtered = prev.filter(
-          (u) => u.id !== authUid && u.email.toLowerCase() !== email.toLowerCase()
-        );
-        return [syncedUser, ...filtered];
+      setAuthPrompt({
+        isOpen: true,
+        role: role === 'operator' ? 'operator' : 'traveler',
+        destinationTab,
+        destinationParam,
+        reason,
       });
-      setCurrentUserId(authUid);
+    },
+    []
+  );
 
-      if (dbData.requests.length > 0) {
-        setRequests((prev) => mergeById(dbData.requests, prev));
-      }
-      if (dbData.operators.length > 0) {
-        setOperators((prev) => mergeById(dbData.operators, prev));
-      } else if (resolvedRole === 'operator') {
-        const newOp: Operator = {
-          id: `op_${authUid}`,
-          user_id: authUid,
-          business_name: `${syncedUser.name} Safaris & Hospitality`,
-          contact_name: syncedUser.name,
-          phone: syncedUser.phone || '+254 700 000 000',
-          email,
-          categories: ['safari', 'hotel'],
-          regions: ['Maasai Mara', 'Nairobi'],
-          status: 'approved',
-          is_profile_complete: true,
-          access_expires_at: null,
-          rating: 5.0,
-          review_count: 0,
-          created_at: new Date().toISOString(),
-        };
-        setOperators((prev) =>
-          prev.some((op) => op.user_id === authUid || op.email.toLowerCase() === email.toLowerCase())
-            ? prev
-            : [newOp, ...prev]
-        );
-        void upsertOperatorInDb(authUid, newOp);
-      }
-      if (dbData.bids.length > 0) {
-        setBids((prev) => mergeById(dbData.bids, prev));
-      }
-      if (dbData.bookmarks.length > 0) {
-        setBookmarks((prev) => mergeById(dbData.bookmarks, prev));
-      }
-      if (dbData.unlocks.length > 0) {
-        setUnlocks((prev) => mergeById(dbData.unlocks, prev));
-      }
-      if (dbData.payments.length > 0) {
-        setPayments((prev) => mergeById(dbData.payments, prev));
-      }
-      if (dbData.reviews.length > 0) {
-        setReviews((prev) => mergeById(dbData.reviews, prev));
-      }
-      if (dbData.blogPosts.length > 0) {
-        setBlogPosts((prev) => mergeById(dbData.blogPosts, prev));
-      }
-      if (dbData.reports.length > 0) {
-        setReports((prev) => mergeById(dbData.reports, prev));
-      }
-    };
+  const closeAuthPrompt = useCallback(() => setAuthPrompt(null), []);
 
-    const refreshMarketplace = async () => {
-      const market = await loadMarketplaceData();
-      if (!isMounted) return;
-      if (market.requests.length > 0) {
-        setRequests((prev) => mergeById(market.requests, prev));
-      }
-      if (market.operators.length > 0) {
-        setOperators((prev) => mergeById(market.operators, prev));
-      }
-      if (market.reviews.length > 0) {
-        setReviews((prev) => mergeById(market.reviews, prev));
-      }
-      if (market.blogPosts.length > 0) {
-        setBlogPosts((prev) => mergeById(market.blogPosts, prev));
-      }
-    };
+  // Refresh everything from Supabase using the current Supabase Auth session
+  const refreshData = useCallback(async () => {
+    setIsLoadingData(true);
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
 
-    void refreshMarketplace();
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        void hydrateAuthenticatedSession(session.user);
+      if (sessionError) {
+        reportError(`auth.getSession: ${sessionError.message}`);
       }
-    });
+
+      if (session?.user?.id) {
+        const loaded = await loadAuthenticatedSupabaseState(session.user.id);
+        setCurrentUser(loaded.profile);
+        setCurrentOperator(loaded.operatorProfile);
+        setOperators(loaded.operators);
+        setRequests(loaded.requests);
+        setBids(loaded.bids);
+        setPasses(loaded.passes);
+        setPayments(loaded.payments);
+        setUnlocks(loaded.unlocks);
+        setBookmarks(loaded.bookmarks);
+        setRequestContactsByRequestId(loaded.requestContactsByRequestId);
+        setUnlocksUsedByRequestId(loaded.unlocksUsedByRequestId);
+        setUnlockFeeKshByRequestId(loaded.unlockFeeKshByRequestId);
+        setAdminSettings(mapSettingsToAdminConfig(loaded.settings, SEED_ADMIN_SETTINGS));
+
+        if (loaded.errors.length > 0) {
+          reportError(loaded.errors[0]);
+        }
+      } else {
+        setCurrentUser(null);
+        setCurrentOperator(null);
+        setOperators([]);
+        setBids([]);
+        setPasses([]);
+        setPayments([]);
+        setUnlocks([]);
+        setBookmarks([]);
+        setRequestContactsByRequestId({});
+
+        const pub = await loadPublicSupabaseData();
+        setRequests(pub.requests);
+        setUnlocksUsedByRequestId(pub.unlocksUsedByRequestId);
+        setUnlockFeeKshByRequestId(pub.unlockFeeKshByRequestId);
+        setAdminSettings(mapSettingsToAdminConfig(pub.settings, SEED_ADMIN_SETTINGS));
+      }
+    } catch (err) {
+      reportError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsLoadingData(false);
+    }
+  }, [reportError]);
+
+  // Initial load + listen to Supabase Auth state changes
+  useEffect(() => {
+    void refreshData();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
-        authUserIdRef.current = null;
-        void refreshMarketplace();
+        setCurrentUser(null);
+        setCurrentOperator(null);
+        setOperators([]);
+        setRequests([]);
+        setBids([]);
+        setPasses([]);
+        setPayments([]);
+        setUnlocks([]);
+        setBookmarks([]);
+        setRequestContactsByRequestId({});
+        setUnlocksUsedByRequestId({});
+        setUnlockFeeKshByRequestId({});
+        void refreshData();
         return;
       }
-      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
-        void hydrateAuthenticatedSession(session.user);
+
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && session?.user) {
+        void refreshData();
         if (event === 'SIGNED_IN' && session.user.app_metadata?.provider === 'google') {
           setAuthPrompt(null);
           if (window.location.pathname !== '/') {
@@ -650,1796 +473,744 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
 
     return () => {
-      isMounted = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [refreshData]);
 
-  // Refresh marketplace travel requests whenever viewing feeds or switching to operator pages
+  // Re-fetch fresh Supabase rows whenever navigating to dashboard / request pages
   useEffect(() => {
-    const marketplaceTabs = new Set([
+    const dataTabs = new Set([
       'home',
-      'operator-open-requests',
-      'operator-request-detail',
-      'operator-dashboard',
-      'shared-request',
+      'traveler-dashboard',
       'traveler-my-requests',
       'traveler-request-detail',
+      'operator-dashboard',
+      'operator-open-requests',
+      'operator-request-detail',
+      'operator-my-bids',
+      'operator-pay',
+      'shared-request',
     ]);
-    if (!marketplaceTabs.has(activeTab)) return;
+    if (dataTabs.has(activeTab)) {
+      void refreshData();
+    }
+  }, [activeTab, refreshData]);
 
-    let cancelled = false;
-    loadMarketplaceData().then((market) => {
-      if (cancelled) return;
-      if (market.requests.length > 0) {
-        setRequests((prev) => mergeById(market.requests, prev));
-      }
-      if (market.operators.length > 0) {
-        setOperators((prev) => mergeById(market.operators, prev));
-      }
-      if (market.reviews.length > 0) {
-        setReviews((prev) => mergeById(market.reviews, prev));
-      }
-      if (market.blogPosts.length > 0) {
-        setBlogPosts((prev) => mergeById(market.blogPosts, prev));
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTab]);
-
-  const logoutUser = () => {
-    authUserIdRef.current = null;
-    void supabase.auth.signOut();
-    setCurrentUserId(null);
-    localStorage.removeItem(`${STORAGE_PREFIX}current_user_id`);
+  const logoutUser = useCallback(async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      reportError(`auth.signOut: ${error.message}`);
+    }
+    setCurrentUser(null);
+    setCurrentOperator(null);
     setActiveTab('home');
-  };
+  }, [reportError, setActiveTab]);
 
-  const loginUser = (
-    email: string,
-    role: UserRole,
-    name: string,
-    country: string,
-    password?: string,
-    authUserId?: string
-  ) => {
-    if (authUserId) {
-      authUserIdRef.current = authUserId;
+  // Derived allUsers list (strictly from Supabase currentUser)
+  const allUsers = useMemo(() => (currentUser ? [currentUser] : []), [currentUser]);
+
+  // Rule 2: Traveller posts a request -> insert `requests` (no traveller_id) -> insert `request_contacts`
+  const createTravelRequest: AppContextType['createTravelRequest'] = async (data) => {
+    const budgetUsd = Number(data.budget_usd ?? data.budget);
+    if (!budgetUsd || Number.isNaN(budgetUsd) || budgetUsd <= 0) {
+      const msg = 'Budget (USD) is required and must be greater than 0.';
+      reportError(msg);
+      return { success: false, error: msg };
     }
 
-    const existing = allUsers.find(
-      (u) => (authUserId && u.id === authUserId) || u.email.toLowerCase() === email.toLowerCase()
-    );
-    if (existing) {
-      const targetId = authUserId || existing.id;
-      setAllUsers((prev) =>
-        prev.map((u) =>
-          u.id === existing.id
-            ? {
-                ...u,
-                id: targetId,
-                password: !authUserId && password && !u.password ? password : u.password,
-              }
-            : u
-        )
-      );
-      setCurrentUserId(targetId);
-    } else {
-      const newId = authUserId || `user_${Date.now()}`;
-      const newUser: User = {
-        id: newId,
-        email,
-        role,
-        name: name || (email.split('@')[0] ?? 'User'),
-        country: country || (role === 'operator' ? 'Kenya' : 'United Kingdom'),
-        ...(authUserId ? {} : { password: password || 'safari123' }),
-        created_at: new Date().toISOString(),
-      };
-      setAllUsers((prev) => [...prev, newUser]);
-      setCurrentUserId(newId);
-
-      if (authUserId) {
-        void upsertProfileInDb(newUser);
-      }
-
-      if (role === 'operator') {
-        const newOp: Operator = {
-          id: authUserId ? `op_${authUserId}` : `op_${Date.now()}`,
-          user_id: newId,
-          business_name: `${name} Safaris & Hospitality`,
-          contact_name: name,
-          phone: '+254 700 000 000',
-          email,
-          categories: ['safari', 'hotel'],
-          regions: ['Maasai Mara', 'Nairobi'],
-          status: 'approved',
-          is_profile_complete: true,
-          access_expires_at: null,
-          rating: 5.0,
-          review_count: 0,
-          created_at: new Date().toISOString(),
-        };
-        setOperators((prev) => [...prev, newOp]);
-        if (authUserId) {
-          void upsertOperatorInDb(authUserId, newOp);
-        }
+    // Build destination string from category fields
+    let destination = data.destination?.trim() || '';
+    if (!destination) {
+      if (data.category === 'safari' && data.safari_details?.parks?.length) {
+        destination = data.safari_details.parks.join(', ');
+      } else if (data.category === 'hotel' && data.hotel_details?.destination) {
+        destination = data.hotel_details.destination;
+      } else if (data.category === 'bnb' && data.bnb_details?.neighbourhood) {
+        destination = data.bnb_details.neighbourhood;
+      } else {
+        destination = data.traveler_country?.trim() || 'Kenya';
       }
     }
 
-    if (role === 'traveler') {
-      setActiveTab('traveler-dashboard');
-    } else if (role === 'operator') {
-      setActiveTab('operator-dashboard');
-    } else {
-      setActiveTab('admin-verification');
-    }
-  };
-
-  const registerUser = (data: {
-    email: string;
-    password?: string;
-    role: UserRole;
-    name: string;
-    country: string;
-  }): { success: boolean; message?: string } => {
-    const trimmedEmail = data.email.trim().toLowerCase();
-    const existing = allUsers.find((u) => u.email.toLowerCase() === trimmedEmail);
-    if (existing) {
-      return {
-        success: false,
-        message: 'An account with this email address already exists. Please sign in with your password instead.',
-      };
-    }
-
-    const newId = `user_${Date.now()}`;
-    const newUser: User = {
-      id: newId,
-      email: trimmedEmail,
-      role: data.role,
-      name: data.name.trim() || (trimmedEmail.split('@')[0] ?? 'User'),
-      country: data.country.trim() || (data.role === 'operator' ? 'Kenya' : 'United Kingdom'),
-      password: data.password || 'safari123',
-      created_at: new Date().toISOString(),
-    };
-
-    setAllUsers((prev) => [...prev, newUser]);
-    setCurrentUserId(newId);
-
-    if (data.role === 'operator') {
-      const newOp: Operator = {
-        id: `op_${Date.now()}`,
-        user_id: newId,
-        business_name: `${newUser.name} Safaris & Hospitality`,
-        contact_name: newUser.name,
-        phone: '+254 700 000 000',
-        email: trimmedEmail,
-        categories: ['safari', 'hotel'],
-        regions: ['Maasai Mara', 'Nairobi'],
-        status: 'approved',
-        is_profile_complete: true,
-        access_expires_at: null,
-        rating: 5.0,
-        review_count: 0,
-        created_at: new Date().toISOString(),
-      };
-      setOperators((prev) => [...prev, newOp]);
-      setActiveTab('operator-open-requests');
-    } else if (data.role === 'traveler') {
-      setActiveTab('traveler-dashboard');
-    } else {
-      setActiveTab('admin-verification');
-    }
-
-    return { success: true };
-  };
-
-  const loginWithCredentials = (
-    email: string,
-    password?: string
-  ): { success: boolean; message?: string } => {
-    const trimmedEmail = email.trim().toLowerCase();
-    const user = allUsers.find((u) => u.email.toLowerCase() === trimmedEmail);
-    if (!user) {
-      return {
-        success: false,
-        message: 'No registered account found with this email. Please register to create an account.',
-      };
-    }
-
-    if (user.password && password && user.password !== password) {
-      return {
-        success: false,
-        message: 'Incorrect password. Please verify your password and try again.',
-      };
-    }
-
-    // Password matches or user has no password
-    setCurrentUserId(user.id);
-
-    if (user.role === 'traveler') {
-      setActiveTab('traveler-dashboard');
-    } else if (user.role === 'operator') {
-      setActiveTab('operator-dashboard');
-    } else {
-      setActiveTab('admin-verification');
-    }
-
-    return { success: true };
-  };
-
-  // Traveler: Create Request
-  const createTravelRequest = (data: {
-    category: TravelCategory;
-    title: string;
-    start_date: string;
-    end_date: string;
-    flexible_month?: string;
-    adults: number;
-    children: number;
-    budget: number;
-    currency: Currency;
-    notes: string;
-    safari_details?: any;
-    hotel_details?: any;
-    bnb_details?: any;
-    whatsapp_number?: string;
-    call_number?: string;
-    email_address?: string;
-    preferred_contact_method?: 'whatsapp' | 'email' | 'phone';
-    preferred_contact_methods?: ('whatsapp' | 'email' | 'phone')[];
-    traveler_country?: string;
-  }): string => {
-    const id = `req_${Date.now()}`;
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    const newReq: TravelRequest = {
-      id,
-      traveler_id: currentUser ? currentUser.id : `traveler_guest_${Date.now()}`,
-      traveler_name: currentUser ? currentUser.name : 'Guest Traveler',
-      traveler_country: data.traveler_country?.trim() || (currentUser ? currentUser.country : 'United Kingdom'),
+    const res = await createRequestWithContactsInDb({
       category: data.category,
-      title: data.title,
+      title: data.title.trim(),
+      description: data.notes.trim(),
+      destination,
       start_date: data.start_date,
       end_date: data.end_date,
-      flexible_month: data.flexible_month,
-      adults: data.adults,
-      children: data.children,
-      budget: data.budget,
-      currency: data.currency,
-      budget_usd: data.currency === 'USD' ? data.budget : Math.round(data.budget / 130),
-      notes: data.notes,
-      safari_details: data.safari_details,
-      hotel_details: data.hotel_details,
-      bnb_details: data.bnb_details,
-      whatsapp_number: data.whatsapp_number,
-      call_number: data.call_number,
-      email_address: data.email_address,
-      preferred_contact_method: data.preferred_contact_method,
-      preferred_contact_methods: data.preferred_contact_methods,
-      slot_limit: 30, // Default 30 slots
-      unlock_limit: 30, // Default 30 unlocks
-      unlocks_enabled: true,
+      adults: Number(data.adults) || 1,
+      children: Number(data.children) || 0,
+      budget_usd: budgetUsd,
+      email: (data.email_address || currentUser?.email || '').trim(),
+      whatsapp: (data.whatsapp_number || '').trim(),
+      phone: (data.call_number || data.whatsapp_number || '').trim(),
+    });
+
+    if (res.error || !res.data) {
+      const errMsg = res.error || 'Failed to save travel request in Supabase.';
+      reportError(errMsg);
+      return { success: false, error: errMsg };
+    }
+
+    await refreshData();
+    return { success: true, id: res.data.id };
+  };
+
+  // Rule 3: Traveller updates unlock_limit, unlocking_enabled, status, expires_at
+  const addRequestUnlocks = async (requestId: string, additionalUnlocks: 10 | 20): Promise<ActionResult> => {
+    const req = requests.find((r) => r.id === requestId);
+    const currentLimit = req?.unlock_limit ?? 30;
+    const res = await updateRequestInDb(requestId, {
+      unlock_limit: currentLimit + additionalUnlocks,
+    });
+    if (res.error) {
+      reportError(res.error);
+      return { success: false, error: res.error };
+    }
+    await refreshData();
+    return { success: true };
+  };
+
+  const extendRequestSlots = addRequestUnlocks;
+
+  const toggleRequestUnlocks = async (requestId: string): Promise<ActionResult> => {
+    const req = requests.find((r) => r.id === requestId);
+    const nextEnabled = !(req?.unlocks_enabled !== false);
+    const res = await updateRequestInDb(requestId, {
+      unlocking_enabled: nextEnabled,
+    });
+    if (res.error) {
+      reportError(res.error);
+      return { success: false, error: res.error };
+    }
+    await refreshData();
+    return { success: true };
+  };
+
+  const extendRequestTime = async (requestId: string, additionalDays: 3 | 7): Promise<ActionResult> => {
+    const req = requests.find((r) => r.id === requestId);
+    const currentExp = req?.expires_at ? new Date(req.expires_at).getTime() : Date.now();
+    const base = Math.max(Number.isNaN(currentExp) ? Date.now() : currentExp, Date.now());
+    const newExp = new Date(base + additionalDays * 24 * 60 * 60 * 1000).toISOString();
+    const res = await updateRequestInDb(requestId, {
+      expires_at: newExp,
       status: 'open',
-      expires_at: expiresAt,
-      created_at: new Date().toISOString(),
-    };
-
-    setRequests((prev) => [newReq, ...prev]);
-
-    void (async () => {
-      const uid = authUserIdRef.current || (await getAuthenticatedUserId());
-      if (uid) {
-        authUserIdRef.current = uid;
-        await createTravelRequestInDb(uid, {
-          ...newReq,
-          traveler_id: uid,
-        });
-      }
-    })();
-
-    // Update currentUser contact info if logged in
-    if (currentUser && (data.whatsapp_number || data.call_number)) {
-      const bestPhone = data.whatsapp_number || data.call_number;
-      const updatedUser: User = { ...currentUser, phone: currentUser.phone || bestPhone };
-      setAllUsers((prev) =>
-        prev.map((u) => (u.id === currentUser.id ? updatedUser : u))
-      );
-      if (authUserIdRef.current) {
-        void upsertProfileInDb({ ...updatedUser, id: authUserIdRef.current });
-      }
+    });
+    if (res.error) {
+      reportError(res.error);
+      return { success: false, error: res.error };
     }
-    return id;
+    await refreshData();
+    return { success: true };
   };
 
-  // Traveler: Add more unlocks (+10, +20)
-  const addRequestUnlocks = (requestId: string, additionalUnlocks: 10 | 20) => {
-    setRequests((prev) =>
-      prev.map((req) => {
-        if (req.id !== requestId) return req;
-        const currentLimit = req.unlock_limit || req.slot_limit || 30;
-        const newLimit = currentLimit + additionalUnlocks;
-        if (authUserIdRef.current) {
-          void updateTravelRequestInDb(authUserIdRef.current, requestId, {
-            unlock_limit: newLimit,
-            slot_limit: newLimit,
-          });
-        }
-        return {
-          ...req,
-          unlock_limit: newLimit,
-          slot_limit: newLimit,
-        };
-      })
-    );
-  };
-
-  const extendRequestSlots = (requestId: string, additionalSlots: 10 | 20) => {
-    addRequestUnlocks(requestId, additionalSlots);
-  };
-
-  // Traveler: Allow or stop unlocking (switch that stops new unlocks without affecting bids or contacts already unlocked)
-  const toggleRequestUnlocks = (requestId: string) => {
-    setRequests((prev) =>
-      prev.map((req) => {
-        if (req.id !== requestId) return req;
-        const currentEnabled = req.unlocks_enabled !== false;
-        const newEnabled = !currentEnabled;
-        if (authUserIdRef.current) {
-          void updateTravelRequestInDb(authUserIdRef.current, requestId, {
-            unlocks_enabled: newEnabled,
-            bids_only: !newEnabled,
-          });
-        }
-        return {
-          ...req,
-          unlocks_enabled: newEnabled,
-          bids_only: !newEnabled,
-        };
-      })
-    );
-  };
-
-  // Traveler: Extend time (+3 days, +7 days)
-  const extendRequestTime = (requestId: string, additionalDays: 3 | 7) => {
-    setRequests((prev) =>
-      prev.map((req) => {
-        if (req.id !== requestId) return req;
-        const currentExp = new Date(req.expires_at).getTime();
-        const base = Math.max(currentExp, Date.now());
-        const newExp = new Date(base + additionalDays * 24 * 60 * 60 * 1000).toISOString();
-        const nextStatus = req.status === 'expired' ? 'open' : req.status;
-        if (authUserIdRef.current) {
-          void updateTravelRequestInDb(authUserIdRef.current, requestId, {
-            expires_at: newExp,
-            status: nextStatus,
-          });
-        }
-        return {
-          ...req,
-          expires_at: newExp,
-          status: nextStatus,
-        };
-      })
-    );
-  };
-
-  // Traveler: Close early
-  // Rule: stops new bids AND new unlocks. Confirmation text: "Operators will no longer be able to bid or unlock your contact. You can still see all bids."
-  const closeRequestEarly = (requestId: string, reason?: string) => {
-    const closedReason =
-      reason || 'Operators will no longer be able to bid or unlock your contact. You can still see all bids.';
-    setRequests((prev) =>
-      prev.map((req) =>
-        req.id === requestId
-          ? {
-              ...req,
-              status: 'closed',
-              closed_reason: closedReason,
-            }
-          : req
-      )
-    );
-    if (authUserIdRef.current) {
-      void updateTravelRequestInDb(authUserIdRef.current, requestId, {
-        status: 'closed',
-        closed_reason: closedReason,
-      });
+  const closeRequestEarly = async (requestId: string): Promise<ActionResult> => {
+    const res = await updateRequestInDb(requestId, { status: 'closed' });
+    if (res.error) {
+      reportError(res.error);
+      return { success: false, error: res.error };
     }
+    await refreshData();
+    return { success: true };
   };
 
-  // Traveler: Reopen closed request
-  const reopenRequest = (requestId: string) => {
-    setRequests((prev) =>
-      prev.map((req) => {
-        if (req.id !== requestId) return req;
-        const currentExp = new Date(req.expires_at).getTime();
-        // Ensure request has at least 7 days from now
-        const newExp =
-          currentExp > Date.now() + 24 * 60 * 60 * 1000
-            ? req.expires_at
-            : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-        if (authUserIdRef.current) {
-          void updateTravelRequestInDb(authUserIdRef.current, requestId, {
-            status: 'open',
-            expires_at: newExp,
-            closed_reason: undefined,
-          });
-        }
-        return {
-          ...req,
-          status: 'open',
-          expires_at: newExp,
-          closed_reason: undefined,
-        };
-      })
-    );
+  const reopenRequest = async (requestId: string): Promise<ActionResult> => {
+    const res = await updateRequestInDb(requestId, { status: 'open' });
+    if (res.error) {
+      reportError(res.error);
+      return { success: false, error: res.error };
+    }
+    await refreshData();
+    return { success: true };
   };
 
-  // Traveler: Share contact
-  const shareContactWithOperator = (
+  const editTravelRequest = async (
     requestId: string,
-    operatorId: string,
-    contact: TravelerContact
-  ) => {
-    const newShare: ContactShare = {
-      id: `cs_${Date.now()}`,
-      request_id: requestId,
-      operator_id: operatorId,
-      traveler_id: currentUser ? currentUser.id : 'guest_traveler',
-      traveler_contact: contact,
-      shared_at: new Date().toISOString(),
-    };
-    setContactShares((prev) => [...prev, newShare]);
+    updates: Partial<TravelRequest>
+  ): Promise<ActionResult> => {
+    const dbUpdates: Parameters<typeof updateRequestInDb>[1] = {};
+    if (updates.title !== undefined) dbUpdates.title = updates.title;
+    if (updates.notes !== undefined) dbUpdates.description = updates.notes;
+    if (updates.start_date !== undefined) dbUpdates.start_date = updates.start_date;
+    if (updates.end_date !== undefined) dbUpdates.end_date = updates.end_date;
+    if (updates.adults !== undefined) dbUpdates.adults = updates.adults;
+    if (updates.children !== undefined) dbUpdates.children = updates.children;
+    if (updates.budget_usd !== undefined) dbUpdates.budget_usd = updates.budget_usd;
+    else if (updates.budget !== undefined) dbUpdates.budget_usd = updates.budget;
 
-    // Update the bid status to 'contact_shared'
-    setBids((prev) =>
-      prev.map((b) => {
-        if (b.request_id === requestId && b.operator_id === operatorId) {
-          if (authUserIdRef.current) {
-            void updateBidInDb(authUserIdRef.current, b.id, { status: 'contact_shared' });
-          }
-          return { ...b, status: 'contact_shared' };
-        }
-        return b;
-      })
-    );
+    const res = await updateRequestInDb(requestId, dbUpdates);
+    if (res.error) {
+      reportError(res.error);
+      return { success: false, error: res.error };
+    }
+    await refreshData();
+    return { success: true };
   };
 
-  // Traveler: Shortlist bid
-  const shortlistBid = (bidId: string) => {
-    setBids((prev) =>
-      prev.map((b) => (b.id === bidId ? { ...b, status: 'shortlisted' } : b))
-    );
-    if (authUserIdRef.current) {
-      void updateBidInDb(authUserIdRef.current, bidId, { status: 'shortlisted' });
-    }
+  const repostRequest = async (requestId: string): Promise<ActionResult> => {
+    const original = requests.find((r) => r.id === requestId);
+    if (!original) return { success: false, error: 'Original request not found.' };
+    const existingContact = requestContactsByRequestId[requestId];
+    return createTravelRequest({
+      category: original.category,
+      title: original.title,
+      destination: original.traveler_country,
+      start_date: original.start_date,
+      end_date: original.end_date,
+      adults: original.adults,
+      children: original.children,
+      budget: original.budget_usd ?? original.budget,
+      budget_usd: original.budget_usd ?? original.budget,
+      currency: 'USD',
+      notes: original.notes,
+      email_address: existingContact?.email || currentUser?.email || '',
+      whatsapp_number: existingContact?.whatsapp || '',
+      call_number: existingContact?.phone || '',
+    });
   };
 
-  // Traveler: Decline bid
-  const declineBid = (bidId: string) => {
-    setBids((prev) =>
-      prev.map((b) => (b.id === bidId ? { ...b, status: 'declined' } : b))
-    );
-    if (authUserIdRef.current) {
-      void updateBidInDb(authUserIdRef.current, bidId, { status: 'declined' });
-    }
+  const markRequestBooked = async (requestId: string): Promise<ActionResult> => {
+    return closeRequestEarly(requestId);
   };
 
-  // Rule: "Edit request: allowed only while the request has no bids and no unlocks"
-  const canEditRequest = (requestId: string): { allowed: boolean; reason?: string } => {
-    const bidsCount = bids.filter((b) => b.request_id === requestId).length;
-    const unlocksCount = unlocks.filter((u) => u.request_id === requestId && u.status === 'paid').length;
-    if (bidsCount > 0 && unlocksCount > 0) {
-      return {
-        allowed: false,
-        reason: `Editing is locked because this request already has ${bidsCount} ${bidsCount === 1 ? 'bid' : 'bids'} and ${unlocksCount} ${unlocksCount === 1 ? 'contact unlock' : 'contact unlocks'}.`,
-      };
+  const updateTravelerProfile = async (data: {
+    name: string;
+    country?: string;
+    phone?: string;
+    preferred_currency?: Currency;
+  }): Promise<ActionResult> => {
+    if (!currentUser) return { success: false, error: 'You must be logged in.' };
+    const res = await updateProfileInDb(currentUser.id, data.name.trim());
+    if (res.error) {
+      reportError(res.error);
+      return { success: false, error: res.error };
     }
-    if (bidsCount > 0) {
-      return {
-        allowed: false,
-        reason: `Editing is locked because this request already has ${bidsCount} ${bidsCount === 1 ? 'bid' : 'bids'} from verified operators.`,
-      };
-    }
-    if (unlocksCount > 0) {
-      return {
-        allowed: false,
-        reason: `Editing is locked because ${unlocksCount} ${unlocksCount === 1 ? 'operator has' : 'operators have'} unlocked your contact details.`,
-      };
-    }
-    return { allowed: true };
+    await refreshData();
+    return { success: true };
   };
 
-  // Traveler: Edit request details
-  const editTravelRequest = (requestId: string, updates: Partial<TravelRequest>): boolean => {
-    const check = canEditRequest(requestId);
-    if (!check.allowed) {
-      return false;
-    }
-    setRequests((prev) =>
-      prev.map((r) => (r.id === requestId ? { ...r, ...updates } : r))
-    );
-    if (authUserIdRef.current) {
-      void updateTravelRequestInDb(authUserIdRef.current, requestId, updates);
-    }
-    return true;
-  };
-
-  // Traveler: Delete request
-  const deleteTravelRequest = (requestId: string) => {
-    setRequests((prev) => prev.filter((r) => r.id !== requestId));
-    if (authUserIdRef.current) {
-      void deleteTravelRequestInDb(authUserIdRef.current, requestId);
-    }
-  };
-
-  // Traveler: Repost expired request (prefilled from old one)
-  const repostRequest = (requestId: string): string => {
-    const oldReq = requests.find((r) => r.id === requestId);
-    if (!oldReq) return '';
-    const newId = `req_${Date.now()}`;
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    const newReq: TravelRequest = {
-      ...oldReq,
-      id: newId,
-      status: 'open',
-      slot_limit: 30,
-      unlock_limit: 30,
-      unlocks_enabled: true,
-      bids_only: false,
-      is_booked: false,
-      booked_operator_id: undefined,
-      booked_at: undefined,
-      expires_at: expiresAt,
-      created_at: new Date().toISOString(),
-      closed_reason: undefined,
-    };
-    setRequests((prev) => [newReq, ...prev]);
-    if (authUserIdRef.current) {
-      void createTravelRequestInDb(authUserIdRef.current, newReq);
-    }
-    return newId;
-  };
-
-  // Traveler: Mark as booked or completed
-  const markRequestBooked = (requestId: string, operatorId: string) => {
-    const bookedAt = new Date().toISOString();
-    setRequests((prev) =>
-      prev.map((r) =>
-        r.id === requestId
-          ? {
-              ...r,
-              is_booked: true,
-              booked_operator_id: operatorId,
-              booked_at: bookedAt,
-              status: 'closed',
-              closed_reason: 'Booked with operator.',
-            }
-          : r
-      )
-    );
-    if (authUserIdRef.current) {
-      void updateTravelRequestInDb(authUserIdRef.current, requestId, {
-        is_booked: true,
-        booked_operator_id: operatorId,
-        booked_at: bookedAt,
-        status: 'closed',
-        closed_reason: 'Booked with operator.',
-      });
-    }
-  };
-
-  // In-platform Traveler Contact Unlock Notifications
-  // Rule: "Notify the traveler inside the platform whenever an operator unlocks their contact. Never send bid alerts to their email or WhatsApp."
-  const getTravelerUnlockNotifications = (travelerId: string): TravelerUnlockNotification[] => {
-    const travelerReqs = requests.filter((r) => r.traveler_id === travelerId);
-    const travelerReqIds = new Set(travelerReqs.map((r) => r.id));
-    const relevantUnlocks = unlocks.filter((u) => travelerReqIds.has(u.request_id) && u.status === 'paid');
-
-    return relevantUnlocks
-      .map((u) => {
-        const op = operators.find((o) => o.id === u.operator_id);
-        const req = requests.find((r) => r.id === u.request_id);
-        return {
-          id: `notif_${u.id}`,
-          request_id: u.request_id,
-          request_title: req?.title || u.request_title,
-          operator_id: u.operator_id,
-          operator_business_name: op?.business_name || 'Verified Kenyan Operator',
-          operator_phone: op?.phone,
-          operator_email: op?.email,
-          unlocked_at: u.paid_at || u.held_until,
-          fee_ksh: u.fee_ksh,
-        };
-      })
-      .sort((a, b) => new Date(b.unlocked_at).getTime() - new Date(a.unlocked_at).getTime());
-  };
-
-  // Rule: "The traveler marks the request as booked or completed, then can rate and review the operator. Allow reviews only for operators who bid or unlocked on that request."
-  const getEligibleReviewOperators = (requestId: string): Operator[] => {
-    const operatorIds = new Set<string>();
-    bids.filter((b) => b.request_id === requestId).forEach((b) => operatorIds.add(b.operator_id));
-    unlocks
-      .filter((u) => u.request_id === requestId && u.status === 'paid')
-      .forEach((u) => operatorIds.add(u.operator_id));
-    return operators.filter((op) => operatorIds.has(op.id));
-  };
-
-  // Traveler: Update Profile
-  const updateTravelerProfile = (data: { name: string; country: string; phone?: string; preferred_currency?: Currency }) => {
-    if (!currentUser) return;
-    const updatedUser: User = { ...currentUser, ...data };
-    setAllUsers((prev) =>
-      prev.map((u) => (u.id === currentUser.id ? updatedUser : u))
-    );
-    if (authUserIdRef.current) {
-      void upsertProfileInDb({ ...updatedUser, id: authUserIdRef.current });
-    }
-  };
-
-  // Traveler: Review operator
-  const reviewOperator = (
-    operatorId: string,
-    requestId: string,
-    rating: number,
-    comment: string,
-    tripType: string
-  ) => {
-    const newRev: Review = {
-      id: `rev_${Date.now()}`,
-      operator_id: operatorId,
-      traveler_id: currentUser ? currentUser.id : 'guest_traveler',
-      traveler_name: currentUser ? currentUser.name : 'Verified Traveler',
-      traveler_country: currentUser ? currentUser.country : 'United Kingdom',
-      request_id: requestId,
-      rating,
-      comment,
-      trip_type: tripType,
-      created_at: new Date().toISOString(),
-    };
-    setReviews((prev) => [newRev, ...prev]);
-    if (authUserIdRef.current) {
-      void createReviewInDb(authUserIdRef.current, newRev);
+  // Operator Profile Upsert (`operator_profiles`)
+  const upsertOperator = async (data: {
+    business_name: string;
+    contact_name: string;
+    phone: string;
+    email: string;
+    categories: TravelCategory[];
+    regions: string[];
+    description?: string;
+    licence_number?: string;
+    verification_requested?: boolean;
+  }): Promise<ActionResult> => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const userId = session?.user?.id || currentUser?.id;
+    if (!userId) {
+      const msg = 'You must be logged in to save your operator profile.';
+      reportError(msg);
+      return { success: false, error: msg };
     }
 
-    // Update operator rating and review count
-    setOperators((prev) =>
-      prev.map((op) => {
-        if (op.id !== operatorId) return op;
-        const totalReviews = op.review_count + 1;
-        const newRating = +((op.rating * op.review_count + rating) / totalReviews).toFixed(1);
-        return {
-          ...op,
-          rating: newRating,
-          review_count: totalReviews,
-        };
-      })
-    );
+    const res = await upsertOperatorProfileInDb({
+      user_id: userId,
+      business_name: data.business_name.trim(),
+      contact_person: data.contact_name.trim(),
+      email: data.email.trim(),
+      phone: data.phone.trim(),
+      categories: data.categories,
+      regions: data.regions,
+      description: data.description?.trim() || '',
+      tra_licence_number: data.licence_number?.trim() || undefined,
+      verification_requested: Boolean(data.verification_requested || data.licence_number?.trim()),
+    });
+
+    if (res.error) {
+      reportError(res.error);
+      return { success: false, error: res.error };
+    }
+
+    await refreshData();
+    return { success: true };
   };
 
-  // Operator Profile Gate validator
+  const registerOperator: AppContextType['registerOperator'] = upsertOperator;
+  const updateOperatorProfile: AppContextType['updateOperatorProfile'] = upsertOperator;
+
+  // Rule 9: Upload licence document to private storage bucket "verification-docs" at <user_id>/<filename>
+  const uploadLicenceDocument = async (
+    file: File
+  ): Promise<{ success: boolean; path?: string; error?: string }> => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const userId = session?.user?.id || currentUser?.id;
+    if (!userId) {
+      const msg = 'You must be logged in to upload verification documents.';
+      reportError(msg);
+      return { success: false, error: msg };
+    }
+
+    const res = await uploadVerificationDocToStorage(userId, file);
+    if (res.error || !res.data) {
+      const errMsg = res.error || 'Failed to upload document.';
+      reportError(errMsg);
+      return { success: false, error: errMsg };
+    }
+
+    return { success: true, path: res.data };
+  };
+
   const isProfileComplete = (operator: Operator | null): boolean => {
     if (!operator) return false;
-    if (operator.is_profile_complete === false) return false;
     return Boolean(
-      operator.business_name && operator.business_name.trim().length > 0 &&
-      operator.contact_name && operator.contact_name.trim().length > 0 &&
-      operator.phone && operator.phone.trim().length > 0 &&
-      operator.email && operator.email.trim().length > 0 &&
-      operator.categories && operator.categories.length > 0 &&
-      operator.regions && operator.regions.length > 0
+      operator.business_name?.trim() &&
+        operator.contact_name?.trim() &&
+        operator.phone?.trim() &&
+        operator.email?.trim() &&
+        operator.categories &&
+        operator.categories.length > 0
     );
   };
 
-  // Operator: Bookmarking
-  const toggleBookmark = (requestId: string) => {
-    if (!currentOperator) return;
-    setBookmarks((prev) => {
-      const exists = prev.some((b) => b.operator_id === currentOperator.id && b.request_id === requestId);
-      if (exists) {
-        if (authUserIdRef.current) {
-          void deleteBookmarkInDb(authUserIdRef.current, currentOperator.id, requestId);
-        }
-        return prev.filter((b) => !(b.operator_id === currentOperator.id && b.request_id === requestId));
-      } else {
-        const newBmk: Bookmark = {
-          id: `bmk_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          operator_id: currentOperator.id,
-          request_id: requestId,
-          created_at: new Date().toISOString(),
-        };
-        if (authUserIdRef.current) {
-          void createBookmarkInDb(authUserIdRef.current, newBmk);
-        }
-        return [newBmk, ...prev];
-      }
+  // Rule 4: Operator inserts into `bids` ONLY. If insert fails due to no active pass, shows "Pay KSH 850 to bid" + real error.
+  const submitBid: AppContextType['submitBid'] = async (data) => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const operatorId = session?.user?.id || currentOperator?.user_id || currentUser?.id;
+    if (!operatorId) {
+      const msg = 'You must be signed in as an operator to submit a bid.';
+      reportError(msg);
+      return { success: false, error: msg };
+    }
+
+    const res = await insertBidInDb({
+      request_id: data.request_id,
+      operator_id: operatorId,
+      amount_usd: Number(data.price),
+      message: data.follow_up_message?.trim() || data.message.trim(),
+      inclusions: data.inclusions,
+      valid_until: data.valid_until,
     });
+
+    if (res.error) {
+      reportError(res.error);
+      return { success: false, error: res.error };
+    }
+
+    await refreshData();
+    return { success: true };
+  };
+
+  // Bookmarks (`bookmarks(operator_id, request_id)`)
+  const toggleBookmark = async (requestId: string): Promise<void> => {
+    const operatorId = currentOperator?.user_id || currentUser?.id;
+    if (!operatorId) {
+      reportError('Sign in as an operator to bookmark requests.');
+      return;
+    }
+
+    const existing = bookmarks.find(
+      (b) => b.operator_id === operatorId && b.request_id === requestId
+    );
+    const res = existing
+      ? await removeBookmarkInDb(operatorId, requestId)
+      : await addBookmarkInDb(operatorId, requestId);
+
+    if (res.error) {
+      reportError(res.error);
+      return;
+    }
+
+    await refreshData();
   };
 
   const isBookmarked = (requestId: string): boolean => {
-    if (!currentOperator) return false;
-    return bookmarks.some((b) => b.operator_id === currentOperator.id && b.request_id === requestId);
+    const operatorId = currentOperator?.user_id || currentUser?.id;
+    if (!operatorId) return false;
+    return bookmarks.some((b) => b.operator_id === operatorId && b.request_id === requestId);
   };
 
-  // Operator: Register business
-  const registerOperator = (data: {
-    business_name: string;
-    contact_name: string;
-    phone: string;
-    email: string;
-    categories: TravelCategory[];
-    regions: string[];
-    description?: string;
-    licence_number?: string;
-    licence_file_name?: string;
-    business_registration_file_name?: string;
-  }) => {
-    const currentUid = currentUser?.id || `user_op_${Date.now()}`;
-    let op = operators.find((o) => o.user_id === currentUid);
-    if (op) {
-      const updatedOp: Operator = {
-        ...op,
-        ...data,
-        status: 'approved',
-        is_profile_complete: true,
-        rejection_reason: undefined,
-      };
-      setOperators((prev) =>
-        prev.map((o) => (o.user_id === currentUid ? updatedOp : o))
-      );
-      if (authUserIdRef.current) {
-        void upsertOperatorInDb(authUserIdRef.current, updatedOp);
-      }
-    } else {
-      const newOp: Operator = {
-        id: `op_${Date.now()}`,
-        user_id: currentUid,
-        business_name: data.business_name,
-        contact_name: data.contact_name,
-        phone: data.phone,
-        email: data.email,
-        categories: data.categories,
-        regions: data.regions,
-        description: data.description || '',
-        licence_file_name: data.licence_file_name,
-        business_registration_file_name: data.business_registration_file_name,
-        licence_number: data.licence_number,
-        status: 'approved',
-        is_profile_complete: true,
-        access_expires_at: null,
-        rating: 5.0,
-        review_count: 0,
-        created_at: new Date().toISOString(),
-      };
-      setOperators((prev) => [...prev, newOp]);
-      if (authUserIdRef.current) {
-        void upsertOperatorInDb(authUserIdRef.current, newOp);
-      }
-    }
-  };
+  // Rule 5: Active pass = a row in `passes` with expires_at > now() for this operator.
+  const getActivePassForOperator = useCallback(
+    (operatorId: string | null | undefined): OperatorPassRecord | null => {
+      if (!operatorId) return null;
+      const nowMs = Date.now();
+      const matching = passes
+        .filter((p) => p.operator_id === operatorId)
+        .filter((p) => {
+          const expMs = new Date(p.expires_at).getTime();
+          return !Number.isNaN(expMs) && expMs > nowMs;
+        })
+        .sort((a, b) => new Date(b.expires_at).getTime() - new Date(a.expires_at).getTime());
 
-  // Operator: Update private profile
-  const updateOperatorProfile = (data: {
-    business_name: string;
-    contact_name: string;
-    phone: string;
-    email: string;
-    categories: TravelCategory[];
-    regions: string[];
-    description?: string;
-    licence_number?: string;
-    licence_file_name?: string;
-    business_registration_file_name?: string;
-  }) => {
-    const currentUid = currentUser?.id || `user_op_${Date.now()}`;
-    let op = operators.find((o) => o.user_id === currentUid);
-    if (op) {
-      const updatedOp: Operator = {
-        ...op,
-        ...data,
-        is_profile_complete: true,
-        status: 'approved',
-        rejection_reason: undefined,
-      };
-      setOperators((prev) =>
-        prev.map((o) => (o.user_id === currentUid ? updatedOp : o))
-      );
-      if (authUserIdRef.current) {
-        void upsertOperatorInDb(authUserIdRef.current, updatedOp);
+      return matching[0] || null;
+    },
+    [passes]
+  );
+
+  const getBiddingPassTimeRemaining = useCallback(
+    (operator: Operator | null) => {
+      const opId = operator?.user_id || currentUser?.id;
+      const activePass = getActivePassForOperator(opId);
+      if (!activePass) {
+        return { active: false, label: 'Inactive / Expired', hoursLeft: 0, minutesLeft: 0, expiresAt: null };
       }
-    } else {
-      const newOp: Operator = {
-        id: `op_${Date.now()}`,
-        user_id: currentUid,
-        business_name: data.business_name,
-        contact_name: data.contact_name,
-        phone: data.phone,
-        email: data.email,
-        categories: data.categories,
-        regions: data.regions,
-        description: data.description || '',
-        licence_file_name: data.licence_file_name,
-        business_registration_file_name: data.business_registration_file_name,
-        licence_number: data.licence_number,
-        status: 'approved',
-        is_profile_complete: true,
-        access_expires_at: null,
-        rating: 5.0,
-        review_count: 0,
-        created_at: new Date().toISOString(),
-      };
-      setOperators((prev) => [...prev, newOp]);
-      if (authUserIdRef.current) {
-        void upsertOperatorInDb(authUserIdRef.current, newOp);
+      const diffMs = new Date(activePass.expires_at).getTime() - Date.now();
+      if (diffMs <= 0) {
+        return { active: false, label: 'Expired', hoursLeft: 0, minutesLeft: 0, expiresAt: activePass.expires_at };
       }
-    }
-  };
-
-  // Operator: Pay via Safaricom M-Pesa Daraja STK Push (KSH 850 24-Hour Bidding Pass)
-  const submitMpesaPayment = async (
-    operatorId: string,
-    phoneNumber: string,
-    passType: 'bidding' | 'contact_unlock' = 'bidding',
-    simulateFailure?: boolean
-  ): Promise<{ success: boolean; transactionId: string; message: string; notCharged?: boolean }> => {
-    // Generate authentic Safaricom Daraja M-Pesa receipt code e.g. "RJK82937XJ"
-    const prefix = ['QHK', 'RJK', 'SMT', 'TLP', 'UKW', 'VMN'][Math.floor(Math.random() * 6)];
-    const randomSuffix = Math.floor(1000000 + Math.random() * 9000000).toString();
-    const transactionId = `${prefix}${randomSuffix.substring(0, 7)}`;
-
-    const targetOp = operators.find((o) => o.id === operatorId);
-    if (!targetOp) {
-      return { success: false, transactionId: '', message: 'Operator account not found.' };
-    }
-
-    // Profile Gate check
-    if (!isProfileComplete(targetOp)) {
+      const hoursLeft = Math.floor(diffMs / (1000 * 60 * 60));
+      const minutesLeft = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
       return {
-        success: false,
-        transactionId: '',
-        message: 'Profile incomplete. Please submit your business profile before paying for a pass.',
+        active: true,
+        label: `${hoursLeft}h ${minutesLeft}m left`,
+        hoursLeft,
+        minutesLeft,
+        expiresAt: activePass.expires_at,
       };
-    }
+    },
+    [currentUser?.id, getActivePassForOperator]
+  );
 
-    const isContactUnlock = passType === 'contact_unlock';
-    const amount = adminSettings.biddingPassFeeKsh || 850;
-    const passTitle = '24-Hour Bidding Pass';
+  const isBiddingPassActive = useCallback(
+    (operator: Operator | null): boolean => getBiddingPassTimeRemaining(operator).active,
+    [getBiddingPassTimeRemaining]
+  );
 
-    // Check duplicate transaction ID rule: "Grant a pass once per confirmed transaction ID"
-    const isDuplicate = payments.some(
-      (p) => p.mpesa_transaction_id === transactionId && p.status === 'completed'
-    );
-    if (isDuplicate) {
+  const isPassActive = isBiddingPassActive;
+
+  const getPassTimeRemaining = useCallback(
+    (operator: Operator | null) => {
+      const info = getBiddingPassTimeRemaining(operator);
+      return { active: info.active, label: info.label, hoursLeft: info.hoursLeft };
+    },
+    [getBiddingPassTimeRemaining]
+  );
+
+  const isContactPassActive = () => false;
+  const getContactPassTimeRemaining = () => ({
+    active: false,
+    label: 'Per-listing unlock',
+    hoursLeft: 0,
+    expiresAt: null,
+  });
+
+  const verifyPassOnServer = useCallback(
+    async (operatorId: string) => {
+      const { data, error } = await supabase
+        .from('passes')
+        .select('*')
+        .eq('operator_id', operatorId)
+        .gt('expires_at', new Date().toISOString())
+        .order('expires_at', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        reportError(`select passes: ${error.message}`);
+        return {
+          active: false,
+          hoursRemaining: 0,
+          minutesRemaining: 0,
+          isEndingSoon: false,
+          label: 'Unable to check pass',
+          expiresAt: null,
+        };
+      }
+
+      const activeRow = data && data[0];
+      if (!activeRow?.expires_at) {
+        return {
+          active: false,
+          hoursRemaining: 0,
+          minutesRemaining: 0,
+          isEndingSoon: false,
+          label: 'No active pass',
+          expiresAt: null,
+        };
+      }
+
+      const diffMs = new Date(activeRow.expires_at).getTime() - Date.now();
+      if (diffMs <= 0) {
+        return {
+          active: false,
+          hoursRemaining: 0,
+          minutesRemaining: 0,
+          isEndingSoon: false,
+          label: 'Expired',
+          expiresAt: activeRow.expires_at,
+        };
+      }
+
+      const hoursRemaining = Math.floor(diffMs / (1000 * 60 * 60));
+      const minutesRemaining = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
       return {
-        success: false,
-        transactionId,
-        message: 'Transaction ID already utilized for a previous pass.',
+        active: true,
+        hoursRemaining,
+        minutesRemaining,
+        isEndingSoon: diffMs < 2 * 60 * 60 * 1000,
+        label: `${hoursRemaining}h ${minutesRemaining}m left`,
+        expiresAt: activeRow.expires_at,
       };
-    }
+    },
+    [reportError]
+  );
 
-    // Handle intentional or simulated failed attempt
-    if (simulateFailure) {
-      const failedPaymentRec: PaymentRecord = {
-        id: `pay_fail_${Date.now()}`,
-        operator_id: operatorId,
-        operator_business_name: targetOp.business_name,
-        amount,
-        pass_type: passType,
-        currency: 'KSH',
-        mpesa_transaction_id: transactionId,
-        phone_number: phoneNumber,
-        status: 'failed',
-        failure_reason: 'User cancelled M-Pesa PIN prompt / STK request timeout',
-        paid_at: new Date().toISOString(),
-        pass_expires_at: '',
-      };
-      setPayments((prev) => [failedPaymentRec, ...prev]);
-      return {
-        success: false,
-        transactionId,
-        message: 'M-Pesa payment attempt was cancelled. Not charged.',
-        notCharged: true,
-      };
-    }
-
-    // 24-hour pass calculation from current confirmed time
-    const passExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
-    const paymentRec: PaymentRecord = {
-      id: `pay_${Date.now()}`,
-      operator_id: operatorId,
-      operator_business_name: targetOp.business_name,
-      amount,
-      pass_type: passType,
-      currency: 'KSH',
-      mpesa_transaction_id: transactionId,
-      phone_number: phoneNumber,
-      status: 'completed',
-      paid_at: new Date().toISOString(),
-      pass_expires_at: passExpiresAt,
-    };
-
-    setPayments((prev) => [paymentRec, ...prev]);
-    if (authUserIdRef.current) {
-      void createPaymentInDb(authUserIdRef.current, paymentRec);
-    }
-
-    setOperators((prev) =>
-      prev.map((op) => {
-        if (op.id !== operatorId) return op;
-        if (isContactUnlock) {
-          if (authUserIdRef.current) {
-            void updateOperatorInDb(authUserIdRef.current, operatorId, {
-              contact_unlock_expires_at: passExpiresAt,
-            });
-          }
+  const getPassHistory = useCallback(
+    (operatorId: string): PassHistoryItem[] => {
+      const nowMs = Date.now();
+      return passes
+        .filter((p) => p.operator_id === operatorId)
+        .sort((a, b) => new Date(b.expires_at).getTime() - new Date(a.expires_at).getTime())
+        .map((p) => {
+          const expMs = new Date(p.expires_at).getTime();
+          const startTime = p.created_at || new Date(expMs - 24 * 60 * 60 * 1000).toISOString();
+          const active = expMs > nowMs;
+          const bidsCount = bids.filter((b) => b.operator_id === operatorId).length;
           return {
-            ...op,
-            contact_unlock_expires_at: passExpiresAt,
+            id: p.id,
+            operator_id: p.operator_id,
+            start: startTime,
+            end: p.expires_at,
+            status: active ? 'active' : 'expired',
+            bids_sent_count: bidsCount,
+            mpesa_transaction_id: p.id,
+            amount: adminSettings.biddingPassFeeKsh || 850,
           };
-        } else {
-          if (authUserIdRef.current) {
-            void updateOperatorInDb(authUserIdRef.current, operatorId, {
-              bidding_pass_expires_at: passExpiresAt,
-              access_expires_at: passExpiresAt,
-            });
-          }
-          return {
-            ...op,
-            bidding_pass_expires_at: passExpiresAt,
-            access_expires_at: passExpiresAt,
-          };
+        });
+    },
+    [adminSettings.biddingPassFeeKsh, bids, passes]
+  );
+
+  // Rule 6: Unlock fee from RPC `unlock_fee_ksh({ p_budget_usd })` & unlocks used from RPC `unlocks_used({ p_request })`
+  const calculateUnlockFee = useCallback(
+    (request: TravelRequest): { feeKsh: number; tierLabel: string } => {
+      const rpcFee = unlockFeeKshByRequestId[request.id];
+      const budgetUsd = request.budget_usd ?? request.budget;
+      return {
+        feeKsh: rpcFee !== undefined ? rpcFee : 0,
+        tierLabel: `$${budgetUsd.toLocaleString()} USD`,
+      };
+    },
+    [unlockFeeKshByRequestId]
+  );
+
+  const getListingUnlockInfo = useCallback(
+    (requestId: string) => {
+      const req = requests.find((r) => r.id === requestId);
+      const total = req?.unlock_limit ?? 30;
+      const bidsOnly = req?.unlocks_enabled === false || req?.bids_only === true;
+      const paidCount = unlocksUsedByRequestId[requestId] ?? 0;
+      const remaining = Math.max(0, total - paidCount);
+      return {
+        paidCount,
+        remaining,
+        isFull: remaining === 0,
+        total,
+        bidsOnly,
+      };
+    },
+    [requests, unlocksUsedByRequestId]
+  );
+
+  // Rule 6: Contact details show ONLY if `request_contacts` returns a row for that request (RLS allows only after paid unlock)
+  const isContactUnlocked = useCallback(
+    (requestId: string, _operatorId: string): boolean => {
+      return Boolean(requestContactsByRequestId[requestId]);
+    },
+    [requestContactsByRequestId]
+  );
+
+  const getUnlockedContact = useCallback(
+    (requestId: string, _operatorId: string): TravelerContact | undefined => {
+      return requestContactsByRequestId[requestId];
+    },
+    [requestContactsByRequestId]
+  );
+
+  const fetchRequestContactDetails = useCallback(
+    async (requestId: string): Promise<TravelerContact | null> => {
+      const [contactRes, usedRes] = await Promise.all([
+        fetchRequestContactFromDb(requestId),
+        rpcUnlocksUsed(requestId),
+      ]);
+
+      if (contactRes.error) {
+        reportError(contactRes.error);
+      } else if (contactRes.data) {
+        setRequestContactsByRequestId((prev) => ({
+          ...prev,
+          [requestId]: contactRes.data!,
+        }));
+      }
+
+      if (usedRes.error) {
+        reportError(usedRes.error);
+      } else if (usedRes.data !== null) {
+        setUnlocksUsedByRequestId((prev) => ({
+          ...prev,
+          [requestId]: usedRes.data!,
+        }));
+      }
+
+      const req = requests.find((r) => r.id === requestId);
+      if (req) {
+        const feeRes = await rpcUnlockFeeKsh(req.budget_usd ?? req.budget);
+        if (feeRes.error) {
+          reportError(feeRes.error);
+        } else if (feeRes.data !== null) {
+          setUnlockFeeKshByRequestId((prev) => ({
+            ...prev,
+            [requestId]: feeRes.data!,
+          }));
         }
-      })
-    );
+      }
 
+      return contactRes.data;
+    },
+    [reportError, requests]
+  );
+
+  // Rule 7: Payments, passes, and unlocks are NOT created by the frontend.
+  // Pay buttons call the placeholder Supabase Edge Function and show a clear "not connected yet" message.
+  const payBiddingPass: AppContextType['payBiddingPass'] = async (_operatorId, phoneNumber) => {
+    const res = await invokeMpesaPaymentEdgeFunction({
+      paymentType: 'bidding_pass',
+      phoneNumber,
+    });
+    if (!res.success) {
+      reportError(res.message);
+      return { success: false, message: res.message, notCharged: true };
+    }
+    await refreshData();
+    return { success: true, message: res.message };
+  };
+
+  const submitMpesaPayment: AppContextType['submitMpesaPayment'] = async (
+    operatorId,
+    phoneNumber
+  ) => {
+    const res = await payBiddingPass(operatorId, phoneNumber);
+    return {
+      success: res.success,
+      transactionId: '',
+      message: res.message,
+      notCharged: res.notCharged,
+    };
+  };
+
+  const startUnlockHold: AppContextType['startUnlockHold'] = async (requestId) => {
+    const req = requests.find((r) => r.id === requestId);
+    const fee = req ? calculateUnlockFee(req).feeKsh : 0;
     return {
       success: true,
-      transactionId,
-      message: `M-Pesa payment of KSH ${amount} confirmed (Ref: ${transactionId}). Your ${passTitle} is now active for 24 hours!`,
+      holdId: `edge_unlock_${requestId}`,
+      feeKsh: fee,
+      heldUntil: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
     };
   };
 
-  // Pass History calculation from payments table and bids table
-  const getPassHistory = (operatorId: string): PassHistoryItem[] => {
-    const completedPayments = payments.filter(
-      (p) => p.operator_id === operatorId && p.status === 'completed' && p.pass_expires_at
-    );
-
-    const operatorBids = bids.filter((b) => b.operator_id === operatorId);
-
-    return completedPayments
-      .map((payment) => {
-        const startTime = new Date(payment.paid_at).getTime();
-        const endTime = payment.pass_expires_at ? new Date(payment.pass_expires_at).getTime() : 0;
-        const now = Date.now();
-
-        // Bids sent is a count from the bids table between pass start and end
-        const bidsInPass = operatorBids.filter((b) => {
-          const bidTime = new Date(b.created_at).getTime();
-          return bidTime >= startTime && bidTime <= endTime;
-        }).length;
-
-        const isActive = now >= startTime && now <= endTime;
-
-        return {
-          id: `pass_${payment.id}`,
-          operator_id: operatorId,
-          start: payment.paid_at,
-          end: payment.pass_expires_at || '',
-          bids_sent_count: bidsInPass,
-          status: (isActive ? 'active' : 'expired') as 'active' | 'expired',
-          mpesa_transaction_id: payment.mpesa_transaction_id,
-          amount: payment.amount,
-        };
-      })
-      .sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime());
+  const cancelUnlockHold: AppContextType['cancelUnlockHold'] = async () => {
+    // No frontend writes to unlocks table
   };
 
-  // Server-side pass verification
-  const verifyPassOnServer = async (
-    operatorId: string
-  ): Promise<{
-    active: boolean;
-    hoursRemaining: number;
-    minutesRemaining: number;
-    isEndingSoon: boolean;
-    label: string;
-    expiresAt: string | null;
-  }> => {
-    try {
-      const res = await fetch('/api/pass/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ operator_id: operatorId }),
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // Graceful local server-consistent evaluation fallback
+  const confirmUnlockPayment: AppContextType['confirmUnlockPayment'] = async (data) => {
+    const res = await invokeMpesaPaymentEdgeFunction({
+      paymentType: 'contact_unlock',
+      phoneNumber: data.phoneNumber,
+      requestId: data.requestId,
+    });
+    if (!res.success) {
+      reportError(res.message);
+      return { success: false, message: res.message, notCharged: true };
     }
-
-    const op = operators.find((o) => o.id === operatorId);
-    if (!op || !op.access_expires_at) {
-      return {
-        active: false,
-        hoursRemaining: 0,
-        minutesRemaining: 0,
-        isEndingSoon: false,
-        label: 'No active pass',
-        expiresAt: null,
-      };
-    }
-
-    const diff = new Date(op.access_expires_at).getTime() - Date.now();
-    if (diff <= 0) {
-      return {
-        active: false,
-        hoursRemaining: 0,
-        minutesRemaining: 0,
-        isEndingSoon: false,
-        label: 'Pass Expired',
-        expiresAt: op.access_expires_at,
-      };
-    }
-
-    const totalMinutes = Math.floor(diff / (1000 * 60));
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    return {
-      active: true,
-      hoursRemaining: hours,
-      minutesRemaining: minutes,
-      isEndingSoon: hours <= 3,
-      label: hours >= 1 ? `${hours} hours left` : `${minutes} minutes left`,
-      expiresAt: op.access_expires_at,
-    };
-  };
-
-  // Anti-circumvention detector (prevents phone numbers or email addresses in bids)
-  const containsContactInfo = (text: string): boolean => {
-    // Email regex
-    const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i;
-    // Phone regex (e.g., +254..., 07..., 10+ digits separated by space or dash)
-    const phoneRegex = /(\+?254|\b07|\b01|\b\+1|\b\+44)[\s.-]?\d{2,4}[\s.-]?\d{3,4}[\s.-]?\d{3,4}/;
-    const genericNumberSequence = /\b\d{3,4}[\s.-]\d{3,4}[\s.-]\d{3,4}\b/;
-    // WhatsApp/Telegram/Call handles
-    const socialBypass = /(whatsapp|call me|reach me at|tel:|phone:|wa\.me|t\.me)/i;
-
-    return emailRegex.test(text) || phoneRegex.test(text) || genericNumberSequence.test(text) || socialBypass.test(text);
-  };
-
-  // Operator: Submit or Edit Bid / Send Follow-Up
-  const submitBid = (data: {
-    request_id: string;
-    price: number;
-    currency: Currency;
-    inclusions: string[];
-    message: string;
-    follow_up_message?: string;
-    valid_until: string;
-    operator_email?: string;
-    operator_whatsapp?: string;
-    operator_phone?: string;
-  }): { success: boolean; error?: string } => {
-    if (!currentOperator) {
-      return { success: false, error: 'You must be logged in as an operator to bid.' };
-    }
-
-    if (!isProfileComplete(currentOperator)) {
-      return { success: false, error: 'Create your profile to start bidding. Your profile is private.' };
-    }
-
-    // Check bidding pass active
-    if (!isBiddingPassActive(currentOperator)) {
-      return { success: false, error: 'Your 24-hour operator bidding pass has expired. Activate for KSH 850 via M-Pesa to submit quotes.' };
-    }
-
-    const targetRequest = requests.find((r) => r.id === data.request_id);
-    if (!targetRequest) {
-      return { success: false, error: 'Request not found.' };
-    }
-
-    // When the traveler closes the enquiry, bids and unlocks both stop.
-    if (targetRequest.status === 'closed' || targetRequest.status === 'expired') {
-      return { success: false, error: `This enquiry is closed. Bids can no longer be submitted or edited.` };
-    }
-
-    // Operator contact details: email, whatsapp, and call number
-    const email = data.operator_email?.trim() || currentOperator.email;
-    const phone = data.operator_phone?.trim() || currentOperator.phone;
-    const whatsapp = data.operator_whatsapp?.trim() || currentOperator.phone;
-
-    if (!email || !phone || !whatsapp) {
-      return {
-        success: false,
-        error: 'Please provide all your contact details (Email, WhatsApp number, and Phone Call number).',
-      };
-    }
-
-    // Check if operator already submitted a bid on this request:
-    // Rule: "One bid per operator per request, which the operator can send follow-ups on while open."
-    const existingBid = bids.find(
-      (b) => b.request_id === data.request_id && b.operator_id === currentOperator.id
-    );
-
-    if (existingBid) {
-      const trimmedFollowUp = data.follow_up_message?.trim();
-      const nextFollowUps = trimmedFollowUp
-        ? [
-            ...(existingBid.follow_ups || []),
-            {
-              id: `fu_${Date.now()}`,
-              message: trimmedFollowUp,
-              created_at: new Date().toISOString(),
-            },
-          ]
-        : existingBid.follow_ups;
-
-      const bidUpdates: Partial<Bid> = {
-        price: data.price,
-        currency: data.currency,
-        inclusions: data.inclusions,
-        message: data.message,
-        follow_ups: nextFollowUps,
-        valid_until: data.valid_until,
-        operator_email: email,
-        operator_whatsapp: whatsapp,
-        operator_phone: phone,
-      };
-
-      setBids((prev) =>
-        prev.map((b) => (b.id === existingBid.id ? { ...b, ...bidUpdates } : b))
-      );
-      if (authUserIdRef.current) {
-        void updateBidInDb(authUserIdRef.current, existingBid.id, bidUpdates);
-      }
-      return { success: true };
-    }
-
-    const newBid: Bid = {
-      id: `bid_${Date.now()}`,
-      request_id: data.request_id,
-      operator_id: currentOperator.id,
-      operator_business_name: currentOperator.business_name,
-      operator_rating: currentOperator.rating,
-      operator_review_count: currentOperator.review_count,
-      operator_verified: true,
-      price: data.price,
-      currency: data.currency,
-      inclusions: data.inclusions,
-      message: data.message,
-      valid_until: data.valid_until,
-      status: 'sent',
-      created_at: new Date().toISOString(),
-      operator_email: email,
-      operator_whatsapp: whatsapp,
-      operator_phone: phone,
-    };
-
-    // There is no limit on the number of bids per request. They stay open until the traveler closes the enquiry.
-    setBids((prev) => [newBid, ...prev]);
-    if (authUserIdRef.current) {
-      void createBidInDb(authUserIdRef.current, newBid);
-    }
-    return { success: true };
-  };
-
-  // Admin Actions
-  const adminApproveOperator = (operatorId: string) => {
-    setOperators((prev) =>
-      prev.map((op) =>
-        op.id === operatorId
-          ? {
-              ...op,
-              status: 'approved',
-              rejection_reason: undefined,
-            }
-          : op
-      )
-    );
-    if (authUserIdRef.current) {
-      void updateOperatorInDb(authUserIdRef.current, operatorId, {
-        status: 'approved',
-        rejection_reason: undefined,
-      });
-    }
-  };
-
-  const adminRejectOperator = (operatorId: string, reason: string) => {
-    setOperators((prev) =>
-      prev.map((op) =>
-        op.id === operatorId
-          ? {
-              ...op,
-              status: 'rejected',
-              rejection_reason: reason,
-            }
-          : op
-      )
-    );
-    if (authUserIdRef.current) {
-      void updateOperatorInDb(authUserIdRef.current, operatorId, {
-        status: 'rejected',
-        rejection_reason: reason,
-      });
-    }
-  };
-
-  const adminResolveReport = (reportId: string, status: 'resolved' | 'dismissed') => {
-    setReports((prev) =>
-      prev.map((rep) => (rep.id === reportId ? { ...rep, status } : rep))
-    );
-    if (authUserIdRef.current) {
-      void updateReportStatusInDb(authUserIdRef.current, reportId, status);
-    }
-  };
-
-  // Reporting
-  const reportTarget = (data: {
-    target_type: 'operator' | 'bid' | 'request';
-    target_id: string;
-    target_title: string;
-    reason: string;
-    details: string;
-  }) => {
-    const newRep: FlaggedReport = {
-      id: `rep_${Date.now()}`,
-      reported_by_id: currentUser ? currentUser.id : 'guest',
-      reported_by_name: currentUser ? currentUser.name : 'Guest User',
-      target_type: data.target_type,
-      target_id: data.target_id,
-      target_title: data.target_title,
-      reason: data.reason,
-      details: data.details,
-      status: 'pending',
-      created_at: new Date().toISOString(),
-    };
-    setReports((prev) => [newRep, ...prev]);
-    if (authUserIdRef.current) {
-      void createReportInDb(authUserIdRef.current, newRep);
-    }
+    await refreshData();
+    return { success: true, message: res.message };
   };
 
   // Helpers
-  const getSlotInfo = (requestId: string): SlotInfo => {
-    const req = requests.find((r) => r.id === requestId);
-    if (!req) return { total: 30, used: 0, left: 30, isLocked: false };
-    const used = bids.filter((b) => b.request_id === requestId).length;
-    const total = req.slot_limit || 30;
-    const left = Math.max(0, total - used);
-    const isLocked = req.status === 'locked' || left === 0;
-    return { total, used, left, isLocked };
-  };
+  const getBidsForRequest = useCallback(
+    (requestId: string): Bid[] => {
+      return bids
+        .filter((b) => b.request_id === requestId)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    },
+    [bids]
+  );
 
-  // Bid Privacy Rule: "Operators never see each other's bids or prices."
-  const getBidsForRequest = (requestId: string): Bid[] => {
-    const allForReq = bids.filter((b) => b.request_id === requestId);
-    if (currentUser && currentUser.role === 'operator') {
-      // Operator ONLY sees their own bid on this request!
-      if (!currentOperator) return [];
-      return allForReq.filter((b) => b.operator_id === currentOperator.id);
-    }
-    // Traveler and Admin can see all bids submitted for this request
-    return allForReq;
-  };
-
-  const isBiddingPassActive = (operator: Operator | null): boolean => {
-    if (!operator) return false;
-    const expiry = operator.bidding_pass_expires_at || operator.access_expires_at;
-    if (!expiry) return false;
-    return new Date(expiry).getTime() > Date.now();
-  };
-
-  const isContactPassActive = (operator: Operator | null): boolean => {
-    if (!operator || !operator.contact_unlock_expires_at) return false;
-    return new Date(operator.contact_unlock_expires_at).getTime() > Date.now();
-  };
-
-  const isPassActive = (operator: Operator | null): boolean => {
-    return isBiddingPassActive(operator);
-  };
-
-  const getPassTimeRemaining = (operator: Operator | null): { active: boolean; label: string; hoursLeft: number } => {
-    const res = getBiddingPassTimeRemaining(operator);
-    return { active: res.active, label: res.label, hoursLeft: res.hoursLeft };
-  };
-
-  const getBiddingPassTimeRemaining = (operator: Operator | null): { active: boolean; label: string; hoursLeft: number; expiresAt: string | null } => {
-    if (!operator) return { active: false, label: 'No active pass', hoursLeft: 0, expiresAt: null };
-    const expiry = operator.bidding_pass_expires_at || operator.access_expires_at;
-    if (!expiry) {
-      return { active: false, label: 'No active pass', hoursLeft: 0, expiresAt: null };
-    }
-    const diff = new Date(expiry).getTime() - Date.now();
-    if (diff <= 0) {
-      return { active: false, label: 'Pass Expired', hoursLeft: 0, expiresAt: expiry };
-    }
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    return {
-      active: true,
-      label: `${hours}h ${minutes}m left`,
-      hoursLeft: hours,
-      expiresAt: expiry,
-    };
-  };
-
-  const getContactPassTimeRemaining = (operator: Operator | null): { active: boolean; label: string; hoursLeft: number; expiresAt: string | null } => {
-    if (!operator || !operator.contact_unlock_expires_at) {
-      return { active: false, label: 'No active unlock pass', hoursLeft: 0, expiresAt: null };
-    }
-    const diff = new Date(operator.contact_unlock_expires_at).getTime() - Date.now();
-    if (diff <= 0) {
-      return { active: false, label: 'Pass Expired', hoursLeft: 0, expiresAt: operator.contact_unlock_expires_at };
-    }
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    return {
-      active: true,
-      label: `${hours}h ${minutes}m left`,
-      hoursLeft: hours,
-      expiresAt: operator.contact_unlock_expires_at,
-    };
-  };
-
-  const getContactShare = (requestId: string, operatorId: string): ContactShare | undefined => {
-    return contactShares.find(
-      (cs) => cs.request_id === requestId && cs.operator_id === operatorId
-    );
-  };
-
-  const createBlogPost = (data: Omit<BlogPost, 'id' | 'slug' | 'published_at'>): string => {
-    const id = `blog_${Date.now()}`;
-    const slug = data.title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)+/g, '');
-    const newPost: BlogPost = {
-      ...data,
-      id,
-      slug: slug || `kenya-guide-${Date.now()}`,
-      published_at: new Date().toISOString(),
-    };
-    setBlogPosts((prev) => [newPost, ...prev]);
-    if (authUserIdRef.current) {
-      void createBlogPostInDb(authUserIdRef.current, newPost);
-    }
-    return newPost.slug;
-  };
-
-  const deleteBlogPost = (id: string) => {
-    setBlogPosts((prev) => prev.filter((p) => p.id !== id));
-    if (authUserIdRef.current) {
-      void deleteBlogPostInDb(authUserIdRef.current, id);
-    }
-  };
-
-  const getBlogPostBySlug = (slug: string): BlogPost | undefined => {
-    return blogPosts.find((p) => p.slug === slug || p.id === slug);
-  };
-
-  // Pricing calculation by traveler total budget (converted to USD at fixed admin rate)
-  const calculateUnlockFee = (request: TravelRequest): { feeKsh: number; tierLabel: string } => {
-    let budgetUsd = request.budget_usd || request.budget;
-    if (!request.budget_usd) {
-      if (request.currency === 'KSH') {
-        budgetUsd = request.budget / (adminSettings.exchangeRateKshPerUsd || 130);
-      } else if (request.currency === 'EUR') {
-        budgetUsd = request.budget * 1.08;
-      } else if (request.currency === 'GBP') {
-        budgetUsd = request.budget * 1.25;
-      }
-    }
-
-    if (budgetUsd < 2000) return { feeKsh: 120, tierLabel: 'Under USD 2,000: KSH 120' };
-    if (budgetUsd < 5000) return { feeKsh: 300, tierLabel: 'USD 2,000 to 4,999: KSH 300' };
-    if (budgetUsd < 10000) return { feeKsh: 600, tierLabel: 'USD 5,000 to 9,999: KSH 600' };
-    if (budgetUsd < 20000) return { feeKsh: 1200, tierLabel: 'USD 10,000 to 19,999: KSH 1,200' };
-    if (budgetUsd < 50000) return { feeKsh: 2500, tierLabel: 'USD 20,000 to 49,999: KSH 2,500' };
-    return { feeKsh: 5000, tierLabel: 'USD 50,000 and above: KSH 5,000' };
-  };
-
-  const getListingUnlockInfo = (requestId: string): { paidCount: number; remaining: number; isFull: boolean; total: number; bidsOnly: boolean } => {
-    const paidCount = unlocks.filter((u) => u.request_id === requestId && u.status === 'paid').length;
-    const targetReq = requests.find((r) => r.id === requestId);
-    const total = targetReq?.unlock_limit || targetReq?.slot_limit || adminSettings.maxUnlocksPerListing || 30;
-    const remaining = Math.max(0, total - paidCount);
-    const bidsOnly = Boolean(targetReq?.bids_only || targetReq?.unlocks_enabled === false);
-    return {
-      paidCount,
-      remaining,
-      isFull: paidCount >= total,
-      total,
-      bidsOnly,
-    };
-  };
-
-  const isContactUnlocked = (requestId: string, operatorId: string): boolean => {
-    return unlocks.some(
-      (u) => u.request_id === requestId && u.operator_id === operatorId && u.status === 'paid'
-    );
-  };
-
-  const getUnlockedContact = (requestId: string, operatorId: string): TravelerContact | undefined => {
-    const unlock = unlocks.find(
-      (u) => u.request_id === requestId && u.operator_id === operatorId && u.status === 'paid'
-    );
-    if (unlock?.traveler_contact) return unlock.traveler_contact;
-    const targetReq = requests.find((r) => r.id === requestId);
-    if (targetReq && isContactUnlocked(requestId, operatorId)) {
+  const getSlotInfo = useCallback(
+    (requestId: string): SlotInfo => {
+      const info = getListingUnlockInfo(requestId);
+      const req = requests.find((r) => r.id === requestId);
       return {
-        name: targetReq.traveler_name,
-        email: targetReq.email_address || 'traveler@safari-stays.com',
-        phone: targetReq.call_number || targetReq.whatsapp_number || '+254700000000',
-        whatsapp: targetReq.whatsapp_number || targetReq.call_number || '+254700000000',
-        preferred_channel:
-          (targetReq.preferred_contact_methods?.length
-            ? targetReq.preferred_contact_methods.join(', ')
-            : targetReq.preferred_contact_method) || 'whatsapp',
+        total: info.total,
+        used: info.paidCount,
+        left: info.remaining,
+        isLocked: req?.status === 'closed' || info.isFull,
       };
-    }
-    return undefined;
-  };
+    },
+    [getListingUnlockInfo, requests]
+  );
 
-  const startUnlockHold = async (
-    requestId: string,
-    operatorId: string
-  ): Promise<{ success: boolean; holdId?: string; feeKsh?: number; error?: string; heldUntil?: string }> => {
-    const targetReq = requests.find((r) => r.id === requestId);
-    const targetOp = operators.find((o) => o.id === operatorId);
-
-    if (!isProfileComplete(targetOp || null)) {
-      return {
-        success: false,
-        error: 'Create your profile to start unlocking contacts. Your profile is private.',
-      };
-    }
-
-    if (targetReq?.status === 'closed' || targetReq?.status === 'expired') {
-      return { success: false, error: 'This enquiry is closed. Bids and unlocks are stopped.' };
-    }
-
-    if (targetReq?.bids_only) {
-      return { success: false, error: 'This listing is marked as Bids only. Unlocking is disabled.' };
-    }
-
-    const budgetUsd = targetReq?.currency === 'USD' ? targetReq.budget : (targetReq?.budget || 2000) / adminSettings.exchangeRateKshPerUsd;
-
-    try {
-      const res = await fetch('/api/unlock/hold', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          operator_id: operatorId,
-          request_id: requestId,
-          budget_usd: budgetUsd,
-          request_status: targetReq?.status || 'open',
-          bids_only: targetReq?.bids_only || false,
-          is_profile_complete: isProfileComplete(targetOp || null),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        return { success: false, error: data.message || 'Slot hold failed' };
-      }
-      return {
-        success: true,
-        holdId: data.hold_id,
-        feeKsh: data.fee_ksh,
-        heldUntil: data.held_until,
-      };
-    } catch {
-      const { feeKsh } = targetReq ? calculateUnlockFee(targetReq) : { feeKsh: 300 };
-      return {
-        success: true,
-        holdId: `hld_${Date.now()}`,
-        feeKsh,
-        heldUntil: new Date(Date.now() + 120 * 1000).toISOString(),
-      };
-    }
-  };
-
-  const cancelUnlockHold = async (holdId: string, operatorId: string, reason?: string) => {
-    try {
-      await fetch('/api/unlock/cancel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hold_id: holdId, operator_id: operatorId, reason }),
-      });
-    } catch {
-      // ignore
-    }
-  };
-
-  const confirmUnlockPayment = async (data: {
-    holdId?: string;
-    requestId: string;
-    operatorId: string;
-    phoneNumber: string;
-    simulateFailure?: boolean;
-    simulateLatePaymentFull?: boolean;
-    requestTitle?: string;
-    requestCategory?: TravelCategory;
-  }): Promise<{ success: boolean; message: string; refunded?: boolean; notCharged?: boolean; unlock?: ContactUnlockRecord }> => {
-    const targetReq = requests.find((r) => r.id === data.requestId);
-    const targetOp = operators.find((o) => o.id === data.operatorId);
-    const budgetUsd = targetReq?.currency === 'USD' ? targetReq.budget : (targetReq?.budget || 2000) / adminSettings.exchangeRateKshPerUsd;
-    const { feeKsh, tierLabel } = targetReq ? calculateUnlockFee(targetReq) : { feeKsh: 300, tierLabel: 'USD 2,000 to 4,999: KSH 300' };
-
-    try {
-      const res = await fetch('/api/unlock/confirm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          hold_id: data.holdId,
-          request_id: data.requestId,
-          operator_id: data.operatorId,
-          phone_number: data.phoneNumber,
-          request_title: data.requestTitle || targetReq?.title || 'Travel Request',
-          request_category: data.requestCategory || targetReq?.category || 'safari',
-          budget_usd: budgetUsd,
-          simulate_failure: data.simulateFailure,
-          simulate_late_payment_full: data.simulateLatePaymentFull,
-        }),
-      });
-      const result = await res.json();
-
-      if (result.notCharged || data.simulateFailure) {
-        const failedPayment: PaymentRecord = {
-          id: `pay_fail_${Date.now()}`,
-          operator_id: data.operatorId,
-          operator_business_name: targetOp?.business_name,
-          type: 'unlock',
-          request_id: data.requestId,
-          request_title: targetReq?.title || 'Unlock contact',
-          amount_ksh: feeKsh,
-          amount: feeKsh,
-          currency: 'KSH',
-          mpesa_transaction_id: result.transactionId || `FLX${Date.now()}`,
-          phone_number: data.phoneNumber,
-          status: 'failed',
-          failure_reason: result.failureReason || 'User cancelled M-Pesa PIN prompt or request timed out',
-          paid_at: new Date().toISOString(),
-          pass_expires_at: null,
-        };
-        setPayments((prev) => [failedPayment, ...prev]);
+  const canEditRequest = useCallback(
+    (requestId: string): { allowed: boolean; reason?: string } => {
+      const req = requests.find((r) => r.id === requestId);
+      if (!req) return { allowed: false, reason: 'Request not found.' };
+      if (req.status === 'closed') return { allowed: false, reason: 'Closed enquiries cannot be edited.' };
+      const reqBids = bids.filter((b) => b.request_id === requestId);
+      const usedUnlocks = unlocksUsedByRequestId[requestId] ?? 0;
+      if (reqBids.length > 0 || usedUnlocks > 0) {
         return {
-          success: false,
-          notCharged: true,
-          message: result.message || 'M-Pesa payment attempt was cancelled. Not charged.',
+          allowed: false,
+          reason: 'Editing is disabled once bids or contact unlocks have been received.',
         };
       }
+      return { allowed: true };
+    },
+    [bids, requests, unlocksUsedByRequestId]
+  );
 
-      if (result.refunded || data.simulateLatePaymentFull) {
-        const refundPayment: PaymentRecord = {
-          id: `pay_ref_${Date.now()}`,
-          operator_id: data.operatorId,
-          operator_business_name: targetOp?.business_name,
-          type: 'unlock',
-          request_id: data.requestId,
-          request_title: targetReq?.title || 'Unlock contact',
-          amount_ksh: feeKsh,
-          amount: feeKsh,
-          currency: 'KSH',
-          mpesa_transaction_id: result.transactionId || `REF${Date.now()}`,
-          phone_number: data.phoneNumber,
-          status: 'failed',
-          failure_reason: 'Slot filled before payment confirmed. Automatic M-Pesa refund processed.',
-          paid_at: new Date().toISOString(),
-          pass_expires_at: null,
-        };
-        setPayments((prev) => [refundPayment, ...prev]);
-        return {
-          success: false,
-          refunded: true,
-          message: result.message || 'Payment confirmed after hold expired and listing is full. KSH ' + feeKsh + ' refunded automatically.',
-        };
-      }
+  const getTravelerUnlockNotifications = useCallback((): TravelerUnlockNotification[] => [], []);
+  const getEligibleReviewOperators = useCallback((): Operator[] => [], []);
+  const getContactShare = () => undefined;
 
-      if (result.success) {
-        const travelerContact: TravelerContact = {
-          name: targetReq?.traveler_name || 'Traveler',
-          email: targetReq?.email_address || 'traveler@safari-stays.com',
-          phone: targetReq?.call_number || targetReq?.whatsapp_number || '+254700000000',
-          whatsapp: targetReq?.whatsapp_number || targetReq?.call_number || '+254700000000',
-          preferred_channel:
-            (targetReq?.preferred_contact_methods?.length
-              ? targetReq.preferred_contact_methods.join(', ')
-              : targetReq?.preferred_contact_method) || 'whatsapp',
-        };
-
-        const newUnlock: ContactUnlockRecord = {
-          id: result.unlock?.id || `unl_${Date.now()}`,
-          request_id: data.requestId,
-          operator_id: data.operatorId,
-          tier: tierLabel,
-          fee_ksh: feeKsh,
-          status: 'paid',
-          held_until: new Date().toISOString(),
-          paid_at: result.paid_at || new Date().toISOString(),
-          request_title: targetReq?.title || 'Travel Request',
-          request_category: targetReq?.category || 'safari',
-          traveler_country: targetReq?.traveler_country,
-          traveler_contact: travelerContact,
-          mpesa_transaction_id: result.transactionId,
-        };
-
-        const newPayment: PaymentRecord = {
-          id: `pay_${Date.now()}`,
-          operator_id: data.operatorId,
-          operator_business_name: targetOp?.business_name,
-          type: 'unlock',
-          request_id: data.requestId,
-          request_title: targetReq?.title || 'Contact Unlock',
-          amount_ksh: feeKsh,
-          amount: feeKsh,
-          currency: 'KSH',
-          mpesa_transaction_id: result.transactionId,
-          phone_number: data.phoneNumber,
-          status: 'completed',
-          paid_at: new Date().toISOString(),
-          pass_expires_at: null,
-        };
-
-        setUnlocks((prev) => [newUnlock, ...prev]);
-        setPayments((prev) => [newPayment, ...prev]);
-        if (authUserIdRef.current) {
-          void createContactUnlockInDb(authUserIdRef.current, newUnlock);
-          void createPaymentInDb(authUserIdRef.current, newPayment);
-        }
-
-        return {
-          success: true,
-          message: result.message || `M-Pesa payment of KSH ${feeKsh} confirmed (${result.transactionId}). Contact unlocked!`,
-          unlock: newUnlock,
-        };
-      }
-
-      return { success: false, message: result.message || 'Payment failed' };
-    } catch (err: any) {
-      return { success: false, message: err.message || 'Payment processing error' };
-    }
+  // Read-only / unsupported actions that do not have matching tables in the user's schema
+  const shareContactWithOperator = () => {
+    reportError('Direct contact sharing is managed via request_contacts unlocks.');
   };
-
-  const payBiddingPass = async (
-    operatorId: string,
-    phoneNumber: string,
-    simulateFailure?: boolean
-  ): Promise<{ success: boolean; message: string; notCharged?: boolean }> => {
-    const targetOp = operators.find((o) => o.id === operatorId);
-    const amount = adminSettings.biddingPassFeeKsh || 850;
-
-    if (!isProfileComplete(targetOp || null)) {
-      return {
-        success: false,
-        message: 'Create your profile to start bidding. Your profile is private.',
-      };
-    }
-
-    try {
-      const res = await fetch('/api/pass/pay', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          operator_id: operatorId,
-          phone_number: phoneNumber,
-          simulate_failure: simulateFailure,
-          is_profile_complete: isProfileComplete(targetOp || null),
-        }),
-      });
-      const result = await res.json();
-
-      if (result.notCharged || !result.success) {
-        if (result.notCharged) {
-          const failedPay: PaymentRecord = {
-            id: `pay_fail_${Date.now()}`,
-            operator_id: operatorId,
-            operator_business_name: targetOp?.business_name,
-            type: 'pass',
-            request_id: null,
-            request_title: '24-hour pass',
-            amount_ksh: amount,
-            amount: amount,
-            currency: 'KSH',
-            mpesa_transaction_id: result.transactionId || `FLX${Date.now()}`,
-            phone_number: phoneNumber,
-            status: 'failed',
-            failure_reason: result.failureReason || 'User cancelled M-Pesa PIN prompt or request timed out',
-            paid_at: new Date().toISOString(),
-            pass_expires_at: null,
-          };
-          setPayments((prev) => [failedPay, ...prev]);
-        }
-        return {
-          success: false,
-          notCharged: Boolean(result.notCharged),
-          message: result.message || 'M-Pesa payment attempt was cancelled. Not charged.',
-        };
-      }
-
-      const passExpiresAt = result.passExpiresAt || new Date(Date.now() + 24 * 3600 * 1000).toISOString();
-      const newPayment: PaymentRecord = {
-        id: `pay_${Date.now()}`,
-        operator_id: operatorId,
-        operator_business_name: targetOp?.business_name,
-        type: 'pass',
-        request_id: null,
-        request_title: '24-hour pass',
-        amount_ksh: amount,
-        amount: amount,
-        currency: 'KSH',
-        mpesa_transaction_id: result.transactionId,
-        phone_number: phoneNumber,
-        status: 'completed',
-        paid_at: new Date().toISOString(),
-        pass_expires_at: passExpiresAt,
-      };
-
-      setPayments((prev) => [newPayment, ...prev]);
-      if (authUserIdRef.current) {
-        void createPaymentInDb(authUserIdRef.current, newPayment);
-        void updateOperatorInDb(authUserIdRef.current, operatorId, {
-          access_expires_at: passExpiresAt,
-          bidding_pass_expires_at: passExpiresAt,
-        });
-      }
-      setOperators((prev) =>
-        prev.map((op) =>
-          op.id === operatorId
-            ? {
-                ...op,
-                access_expires_at: passExpiresAt,
-                bidding_pass_expires_at: passExpiresAt,
-              }
-            : op
-        )
-      );
-
-      return {
-        success: true,
-        message: result.message || `M-Pesa payment of KSH ${amount} confirmed (${result.transactionId}). 24-hour bidding pass active.`,
-      };
-    } catch (err: any) {
-      return { success: false, message: err.message || 'Pass payment failed' };
-    }
+  const shortlistBid = () => {
+    reportError('Bid status updates are not enabled in the current bids table schema.');
   };
-
-  const resetAllData = () => {
-    localStorage.removeItem(`${STORAGE_PREFIX}users`);
-    localStorage.removeItem(`${STORAGE_PREFIX}current_user_id`);
-    localStorage.removeItem(`${STORAGE_PREFIX}operators`);
-    localStorage.removeItem(`${STORAGE_PREFIX}requests`);
-    localStorage.removeItem(`${STORAGE_PREFIX}bids`);
-    localStorage.removeItem(`${STORAGE_PREFIX}contact_shares`);
-    localStorage.removeItem(`${STORAGE_PREFIX}payments`);
-    localStorage.removeItem(`${STORAGE_PREFIX}reviews`);
-    localStorage.removeItem(`${STORAGE_PREFIX}reports`);
-    localStorage.removeItem(`${STORAGE_PREFIX}blog_posts`);
-    localStorage.removeItem(`${STORAGE_PREFIX}blog_posts_v2`);
-    localStorage.removeItem(`${STORAGE_PREFIX}blog_posts_v3`);
-    localStorage.removeItem(`${STORAGE_PREFIX}blog_posts_v4`);
-    localStorage.removeItem(`${STORAGE_PREFIX}bookmarks`);
-    localStorage.removeItem(`${STORAGE_PREFIX}unlocks`);
-    localStorage.removeItem(`${STORAGE_PREFIX}admin_settings`);
-    setAllUsers(SEED_USERS);
-    setCurrentUserId('user_traveler_1');
-    setOperators(SEED_OPERATORS);
-    setRequests(SEED_REQUESTS);
-    setBids(SEED_BIDS);
-    setContactShares(SEED_CONTACT_SHARES);
-    setPayments(SEED_PAYMENTS);
-    setReviews(SEED_REVIEWS);
-    setReports(SEED_REPORTS);
-    setBlogPosts(SEED_BLOG_POSTS);
-    setBookmarks(SEED_BOOKMARKS);
-    setUnlocks(SEED_UNLOCKS);
-    setAdminSettings(SEED_ADMIN_SETTINGS);
-    setActiveTab('home');
+  const declineBid = () => {
+    reportError('Bid status updates are not enabled in the current bids table schema.');
   };
+  const reviewOperator = () => {
+    reportError('Reviews table is not configured in Supabase.');
+  };
+  const adminApproveOperator = () => {
+    reportError('Admin verification updates must be performed via Supabase admin tools.');
+  };
+  const adminRejectOperator = () => {
+    reportError('Admin verification updates must be performed via Supabase admin tools.');
+  };
+  const adminResolveReport = () => {
+    reportError('Moderation reports table is not configured in Supabase.');
+  };
+  const reportTarget = () => {
+    reportError('Moderation reports table is not configured in Supabase.');
+  };
+  const updateAdminSettings = () => {
+    reportError('Settings are read-only from the frontend.');
+  };
+  const createBlogPost = () => {
+    reportError('Blog posts are static content and not stored in Supabase.');
+    return '';
+  };
+  const deleteBlogPost = () => {
+    reportError('Blog posts are static content and not stored in Supabase.');
+  };
+  const getBlogPostBySlug = (slug: string) => blogPosts.find((p) => p.slug === slug);
 
   return (
     <AppContext.Provider
@@ -2450,6 +1221,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         operators,
         requests,
         bids,
+        passes,
         contactShares,
         payments,
         reviews,
@@ -2458,7 +1230,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         bookmarks,
         unlocks,
         adminSettings,
-        updateAdminSettings,
+        isLoadingData,
+        supabaseError,
+        clearSupabaseError,
+        refreshData,
         toggleBookmark,
         isBookmarked,
         createBlogPost,
@@ -2467,10 +1242,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         activeTab,
         setActiveTab,
         tabParam,
-        switchUser,
-        loginUser,
-        registerUser,
-        loginWithCredentials,
         logoutUser,
         authPrompt,
         openAuthPrompt,
@@ -2488,14 +1259,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         reviewOperator,
         canEditRequest,
         editTravelRequest,
-        deleteTravelRequest,
         repostRequest,
         markRequestBooked,
+        updateTravelerProfile,
         getTravelerUnlockNotifications,
         getEligibleReviewOperators,
-        updateTravelerProfile,
         registerOperator,
         updateOperatorProfile,
+        uploadLicenceDocument,
         isProfileComplete,
         submitMpesaPayment,
         submitBid,
@@ -2518,11 +1289,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         getListingUnlockInfo,
         isContactUnlocked,
         getUnlockedContact,
+        fetchRequestContactDetails,
         startUnlockHold,
         cancelUnlockHold,
         confirmUnlockPayment,
         payBiddingPass,
-        resetAllData,
+        updateAdminSettings,
       }}
     >
       {children}
@@ -2530,10 +1302,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 };
 
-export const useApp = () => {
-  const context = useContext(AppContext);
-  if (!context) {
+export const useApp = (): AppContextType => {
+  const ctx = useContext(AppContext);
+  if (!ctx) {
     throw new Error('useApp must be used within an AppProvider');
   }
-  return context;
+  return ctx;
 };

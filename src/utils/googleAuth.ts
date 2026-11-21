@@ -10,14 +10,8 @@ export interface GoogleOAuthResult {
  * Uses skipBrowserRedirect so we can validate the generated URL,
  * handle embedded iframe top-navigation safely, and surface any errors immediately.
  */
-export async function startGoogleOAuth(targetRole: UserRole): Promise<GoogleOAuthResult> {
+export async function startGoogleOAuth(_targetRole: UserRole): Promise<GoogleOAuthResult> {
   try {
-    try {
-      localStorage.setItem('elephantastic_oauth_role', targetRole);
-    } catch {
-      // Ignore storage errors in restricted/private browsing contexts
-    }
-
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {

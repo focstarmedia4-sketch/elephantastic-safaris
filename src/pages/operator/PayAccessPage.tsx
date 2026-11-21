@@ -28,7 +28,7 @@ export const PayAccessPage: React.FC = () => {
     setActiveTab,
   } = useApp();
 
-  const [phone, setPhone] = useState(currentOperator?.phone || '254722456789');
+  const [phone, setPhone] = useState(currentOperator?.phone || '');
   const [selectedPass, setSelectedPass] = useState<PassType>('bidding');
   const [isProcessing, setIsProcessing] = useState(false);
   const [stkPromptVisible, setStkPromptVisible] = useState(false);
@@ -43,7 +43,7 @@ export const PayAccessPage: React.FC = () => {
       <div className="max-w-xl mx-auto px-4 py-16 text-center space-y-4">
         <h2 className="text-xl font-bold text-stone-900">Operator Profile Required</h2>
         <p className="text-xs text-stone-600">
-          Switch to an operator persona to view payment and pass history.
+          Sign in with an operator account and complete your operator profile to view payment and pass history.
         </p>
       </div>
     );
@@ -60,29 +60,25 @@ export const PayAccessPage: React.FC = () => {
   // Filter payment records for this operator
   const myPayments = payments.filter((p) => p.operator_id === currentOperator.id);
 
-  const handleStartStkPush = (e: React.FormEvent) => {
+  const handleStartStkPush = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setLastPaymentResult(null);
-
     setIsProcessing(true);
     setStkPromptVisible(true);
 
-    // Simulate Daraja STK Push prompt after 1.5 seconds
-    setTimeout(async () => {
-      const res = await submitMpesaPayment(currentOperator.id, phone, 'bidding');
-      setIsProcessing(false);
-      setStkPromptVisible(false);
+    const res = await submitMpesaPayment(currentOperator.id, phone, 'bidding');
+    setIsProcessing(false);
+    setStkPromptVisible(false);
 
-      if (res.success) {
-        setLastPaymentResult({
-          transactionId: res.transactionId,
-          message: res.message,
-        });
-      } else {
-        setErrorMsg(res.message);
-      }
-    }, 2000);
+    if (res.success) {
+      setLastPaymentResult({
+        transactionId: res.transactionId,
+        message: res.message,
+      });
+    } else {
+      setErrorMsg(res.message);
+    }
   };
 
   return (
@@ -250,7 +246,7 @@ export const PayAccessPage: React.FC = () => {
                   </p>
                 </div>
                 <div className="text-xs font-mono text-emerald-800 font-semibold">
-                  Simulating Daraja STK callback...
+                  Calling M-Pesa Edge Function...
                 </div>
               </div>
             ) : (

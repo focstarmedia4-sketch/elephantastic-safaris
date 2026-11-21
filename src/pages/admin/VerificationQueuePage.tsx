@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 export const VerificationQueuePage: React.FC = () => {
-  const { operators, adminApproveOperator, adminRejectOperator, switchUser } = useApp();
+  const { operators, adminApproveOperator, adminRejectOperator } = useApp();
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [rejectModalOp, setRejectModalOp] = useState<any | null>(null);
   const [rejectionReason, setRejectionReason] = useState('TRA licence expired or unverified in registry');

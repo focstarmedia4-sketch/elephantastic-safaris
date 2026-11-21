@@ -171,22 +171,31 @@ export const PostRequestModal: React.FC<PostRequestModalProps> = ({
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
 
     setIsSubmitting(true);
 
+    const destination =
+      category === 'safari'
+        ? selectedParks.join(', ')
+        : category === 'hotel'
+          ? hotelDestination.trim()
+          : bnbNeighbourhood.trim();
+
     const payload: any = {
       category,
       title: title.trim(),
+      destination,
       start_date: startDate,
       end_date: endDate,
       flexible_month: flexibleMonth || undefined,
       adults: Number(adults),
       children: Number(children),
       budget: Number(budget),
-      currency,
+      budget_usd: Number(budget),
+      currency: 'USD',
       notes: notes.trim() || 'No additional notes provided.',
       whatsapp_number: whatsappNumber.trim(),
       call_number: (sameAsWhatsapp ? whatsappNumber : callNumber).trim(),
@@ -222,8 +231,12 @@ export const PostRequestModal: React.FC<PostRequestModalProps> = ({
       };
     }
 
-    createTravelRequest(payload);
+    const res = await createTravelRequest(payload);
     setIsSubmitting(false);
+    if (!res.success) {
+      setErrors({ submit: res.error || 'Failed to create request in Supabase.' });
+      return;
+    }
     onClose();
   };
 

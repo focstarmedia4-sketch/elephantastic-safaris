@@ -56,6 +56,7 @@ export const MyRequestsPage: React.FC = () => {
     markRequestBooked,
     getTravelerUnlockNotifications,
     getEligibleReviewOperators,
+    getListingUnlockInfo,
     reviewOperator,
   } = useApp();
 
@@ -92,11 +93,11 @@ export const MyRequestsPage: React.FC = () => {
   // Server error or success banner
   const [serverNotice, setServerNotice] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
 
-  // Filter requests belonging to current traveler
-  const travelerId = currentUser?.id || 'user_traveler_1';
+  // Filter requests belonging to current logged-in traveller (strictly from Supabase)
+  const travelerId = currentUser?.id || '';
   const myRequests = currentUser
     ? requests.filter((r) => r.traveler_id === currentUser.id)
-    : requests.filter((r) => r.traveler_id === 'user_traveler_1' || r.traveler_id.startsWith('traveler_guest'));
+    : [];
 
   // Notifications: in-platform alerts when an operator unlocks contact details
   const unlockNotifications = getTravelerUnlockNotifications(travelerId);
@@ -107,7 +108,7 @@ export const MyRequestsPage: React.FC = () => {
     return acc + bids.filter((b) => b.request_id === req.id).length;
   }, 0);
   const totalContactsUnlocked = myRequests.reduce((acc, req) => {
-    return acc + unlocks.filter((u) => u.request_id === req.id && u.status === 'paid').length;
+    return acc + getListingUnlockInfo(req.id).paidCount;
   }, 0);
 
   const displayedRequests = myRequests.filter((r) => {
@@ -122,169 +123,125 @@ export const MyRequestsPage: React.FC = () => {
     return `${days} ${days === 1 ? 'day' : 'days'} left`;
   };
 
-  // Server-enforced control helper
-  const handleServerControl = async (
-    action: 'add_unlocks' | 'toggle_unlocks' | 'extend_time' | 'close_enquiry' | 'edit_request' | 'reopen_request' | 'mark_booked' | 'repost',
-    req: TravelRequest,
-    extra: Record<string, any> = {}
-  ): Promise<boolean> => {
-    try {
-      const response = await fetch('/api/traveler/request-control', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: currentUser?.id || req.traveler_id,
-          traveler_id: req.traveler_id,
-          action,
-          request_id: req.id,
-          bid_count: bids.filter((b) => b.request_id === req.id).length,
-          unlock_count: unlocks.filter((u) => u.request_id === req.id && u.status === 'paid').length,
-          ...extra,
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        setServerNotice({ type: 'error', text: data.message || 'Action forbidden by server policy.' });
-        setTimeout(() => setServerNotice(null), 6000);
-        return false;
-      }
-      return true;
-    } catch {
-      // In local preview fallback, proceed with client state
-      return true;
-    }
-  };
-
   // Action: Add more unlocks (+10 or +20)
   const executeAddUnlocks = async () => {
     if (!unlocksConfirm) return;
-    const ok = await handleServerControl('add_unlocks', unlocksConfirm.req, {
-      additional_unlocks: unlocksConfirm.add,
-    });
-    if (ok) {
-      addRequestUnlocks(unlocksConfirm.req.id, unlocksConfirm.add);
+    const res = await addRequestUnlocks(unlocksConfirm.req.id, unlocksConfirm.add);
+    if (res.success) {
       setServerNotice({
         type: 'success',
         text: `Successfully increased unlock limit from ${unlocksConfirm.req.unlock_limit || 30} to ${(unlocksConfirm.req.unlock_limit || 30) + unlocksConfirm.add}.`,
       });
-      setTimeout(() => setServerNotice(null), 5000);
       setUnlocksConfirm(null);
+    } else {
+      setServerNotice({ type: 'error', text: res.error || 'Failed to update unlock_limit.' });
     }
+    setTimeout(() => setServerNotice(null), 6000);
   };
 
   // Action: Toggle unlocking (Allow or stop unlocking)
   const handleToggleUnlocking = async (req: TravelRequest) => {
     const nextState = !req.unlocks_enabled;
-    const ok = await handleServerControl('toggle_unlocks', req, {
-      unlocks_enabled: nextState,
-    });
-    if (ok) {
-      toggleRequestUnlocks(req.id);
+    const res = await toggleRequestUnlocks(req.id);
+    if (res.success) {
       setServerNotice({
         type: 'success',
         text: nextState
           ? 'Contact unlocking allowed. Verified operators can now unlock your contact directly.'
           : 'Contact unlocking stopped. New unlocks are paused; operators can now submit bids only.',
       });
-      setTimeout(() => setServerNotice(null), 5000);
+    } else {
+      setServerNotice({ type: 'error', text: res.error || 'Failed to update unlocking_enabled.' });
     }
+    setTimeout(() => setServerNotice(null), 6000);
   };
 
   // Action: Extend time (+3 or +7 days)
   const executeExtendTime = async () => {
     if (!timeConfirm) return;
-    const ok = await handleServerControl('extend_time', timeConfirm.req, {
-      additional_days: timeConfirm.addDays,
-    });
-    if (ok) {
-      extendRequestTime(timeConfirm.req.id, timeConfirm.addDays);
+    const res = await extendRequestTime(timeConfirm.req.id, timeConfirm.addDays);
+    if (res.success) {
       setServerNotice({
         type: 'success',
         text: `Enquiry extended by +${timeConfirm.addDays} days.`,
       });
-      setTimeout(() => setServerNotice(null), 5000);
       setTimeConfirm(null);
+    } else {
+      setServerNotice({ type: 'error', text: res.error || 'Failed to extend expires_at.' });
     }
+    setTimeout(() => setServerNotice(null), 6000);
   };
 
   // Action: Close enquiry (stops new bids AND new unlocks)
   const executeCloseEnquiry = async () => {
     if (!closeConfirm) return;
-    const ok = await handleServerControl('close_enquiry', closeConfirm);
-    if (ok) {
-      closeRequestEarly(closeConfirm.id, 'Operators will no longer be able to bid or unlock your contact. You can still see all bids.');
+    const res = await closeRequestEarly(closeConfirm.id);
+    if (res.success) {
       setServerNotice({
         type: 'success',
         text: 'Enquiry closed. Operators will no longer be able to bid or unlock your contact. You can still see all bids.',
       });
-      setTimeout(() => setServerNotice(null), 6000);
       setCloseConfirm(null);
+    } else {
+      setServerNotice({ type: 'error', text: res.error || 'Failed to close request.' });
     }
+    setTimeout(() => setServerNotice(null), 6000);
   };
 
   // Action: Reopen request
   const executeReopenRequest = async () => {
     if (!reopenConfirm) return;
-    const ok = await handleServerControl('reopen_request', reopenConfirm);
-    if (ok) {
-      reopenRequest(reopenConfirm.id);
+    const res = await reopenRequest(reopenConfirm.id);
+    if (res.success) {
       setServerNotice({
         type: 'success',
         text: 'Enquiry reopened. Verified operators can resume submitting bids and unlocking contact.',
       });
-      setTimeout(() => setServerNotice(null), 5000);
       setReopenConfirm(null);
+    } else {
+      setServerNotice({ type: 'error', text: res.error || 'Failed to reopen request.' });
     }
+    setTimeout(() => setServerNotice(null), 6000);
   };
 
   // Action: Edit request (allowed only with 0 bids and 0 unlocks)
   const executeEditRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editReq) return;
-    const ok = await handleServerControl('edit_request', editReq);
-    if (ok) {
-      const success = editTravelRequest(editReq.id, {
-        title: editTitle.trim(),
-        budget: Number(editBudget),
-        currency: editCurrency,
-        budget_usd: editCurrency === 'USD' ? Number(editBudget) : Math.round(Number(editBudget) / 130),
-        start_date: editStartDate,
-        end_date: editEndDate,
-        adults: Number(editAdults),
-        children: Number(editChildren),
-        notes: editNotes.trim(),
+    const res = await editTravelRequest(editReq.id, {
+      title: editTitle.trim(),
+      budget: Number(editBudget),
+      currency: 'USD',
+      budget_usd: Number(editBudget),
+      start_date: editStartDate,
+      end_date: editEndDate,
+      adults: Number(editAdults),
+      children: Number(editChildren),
+      notes: editNotes.trim(),
+    });
+    if (res.success) {
+      setServerNotice({ type: 'success', text: 'Listing details updated successfully.' });
+      setEditReq(null);
+    } else {
+      setServerNotice({
+        type: 'error',
+        text: res.error || 'Failed to update request.',
       });
-      if (success) {
-        setServerNotice({ type: 'success', text: 'Listing details updated successfully.' });
-        setTimeout(() => setServerNotice(null), 4000);
-        setEditReq(null);
-      } else {
-        setServerNotice({
-          type: 'error',
-          text: 'Editing is allowed only while the request has no bids and no unlocks.',
-        });
-      }
     }
+    setTimeout(() => setServerNotice(null), 6000);
   };
 
   // Action: Re-post expired request
   const handleRepost = async (req: TravelRequest) => {
-    const ok = await handleServerControl('repost', req);
-    if (ok) {
-      setRepostData(req);
-      setPostModalOpen(true);
-    }
+    setRepostData(req);
+    setPostModalOpen(true);
   };
 
   // Action: Mark as booked
   const executeMarkBooked = async () => {
     if (!bookingModalReq || !selectedBookedOperatorId) return;
-    const ok = await handleServerControl('mark_booked', bookingModalReq, {
-      booked_operator_id: selectedBookedOperatorId,
-    });
-    if (ok) {
-      markRequestBooked(bookingModalReq.id, selectedBookedOperatorId);
+    const res = await markRequestBooked(bookingModalReq.id, selectedBookedOperatorId);
+    if (res.success) {
       const bookedOp = operators.find((o) => o.id === selectedBookedOperatorId);
       setBookingModalReq(null);
       if (bookedOp) {
@@ -292,10 +249,12 @@ export const MyRequestsPage: React.FC = () => {
       }
       setServerNotice({
         type: 'success',
-        text: 'Trip marked as booked! You can now rate and review the operator.',
+        text: 'Trip marked as booked!',
       });
-      setTimeout(() => setServerNotice(null), 5000);
+    } else {
+      setServerNotice({ type: 'error', text: res.error || 'Failed to close request.' });
     }
+    setTimeout(() => setServerNotice(null), 6000);
   };
 
   // Action: Submit Review

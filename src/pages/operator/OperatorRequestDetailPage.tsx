@@ -44,6 +44,7 @@ export const OperatorRequestDetailPage: React.FC = () => {
     getListingUnlockInfo,
     isContactUnlocked,
     getUnlockedContact,
+    fetchRequestContactDetails,
     startUnlockHold,
     cancelUnlockHold,
     confirmUnlockPayment,
@@ -91,6 +92,13 @@ export const OperatorRequestDetailPage: React.FC = () => {
   const [passModalSuccess, setPassModalSuccess] = useState('');
 
   const request = requests.find((r) => r.id === requestId);
+
+  // Fetch request_contacts (RLS-gated) + unlocks_used & unlock_fee_ksh RPCs when request changes
+  useEffect(() => {
+    if (request?.id) {
+      void fetchRequestContactDetails(request.id);
+    }
+  }, [request?.id, fetchRequestContactDetails]);
 
   // Sync operator contacts if empty
   useEffect(() => {
@@ -306,21 +314,16 @@ export const OperatorRequestDetailPage: React.FC = () => {
     }
   };
 
-  // Submit Bid
-  const handleSubmitBid = (e: React.FormEvent) => {
+  // Submit Bid (Rule 4: insert into `bids` only; if no active pass, shows "Pay KSH 850 to bid")
+  const handleSubmitBid = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
 
-    if (!operatorEmail.trim() || !operatorWhatsapp.trim() || !operatorPhone.trim()) {
-      setErrorMessage('Please provide your Email, WhatsApp number, and Phone Call number.');
-      return;
-    }
-
-    const res = submitBid({
+    const res = await submitBid({
       request_id: request.id,
       price: Number(price),
-      currency,
+      currency: 'USD',
       inclusions,
       message,
       valid_until: validUntil,
@@ -333,12 +336,12 @@ export const OperatorRequestDetailPage: React.FC = () => {
       setErrorMessage(res.error || 'Failed to submit bid.');
     } else {
       setFollowUpOpen(false);
-      setSuccessMessage('Your bid has been submitted. Bidding on this request is now closed — you can send a follow-up below if needed.');
+      setSuccessMessage('Your bid has been submitted to Supabase.');
     }
   };
 
-  // Send Follow-Up Request (after initial bid has been sent)
-  const handleSendFollowUp = (e: React.FormEvent) => {
+  // Send Follow-Up Request (inserts into bids)
+  const handleSendFollowUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
@@ -354,10 +357,10 @@ export const OperatorRequestDetailPage: React.FC = () => {
 
     const parsed = parseBidMessages(latestBid);
 
-    const res = submitBid({
+    const res = await submitBid({
       request_id: request.id,
       price: latestBid.price,
-      currency: latestBid.currency,
+      currency: 'USD',
       inclusions: latestBid.inclusions,
       message: parsed.initialMessage,
       follow_up_message: trimmedFollowUp,
@@ -372,7 +375,7 @@ export const OperatorRequestDetailPage: React.FC = () => {
     } else {
       setFollowUpMessage('');
       setFollowUpOpen(false);
-      setSuccessMessage('Your follow-up request has been sent to the traveler.');
+      setSuccessMessage('Your follow-up bid has been sent.');
     }
   };
 
@@ -584,16 +587,16 @@ export const OperatorRequestDetailPage: React.FC = () => {
               </p>
 
               <div className="space-y-2 pt-1">
-                {(unlockedContact?.whatsapp || request.whatsapp_number) && (
+                {unlockedContact?.whatsapp && (
                   <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-[#E2DED3]">
                     <div>
                       <span className="text-[10px] text-stone-500 block uppercase font-bold">WhatsApp Direct</span>
                       <span className="font-bold text-stone-900 font-mono text-sm">
-                        {unlockedContact?.whatsapp || request.whatsapp_number}
+                        {unlockedContact.whatsapp}
                       </span>
                     </div>
                     <a
-                      href={`https://wa.me/${(unlockedContact?.whatsapp || request.whatsapp_number || '').replace(/[^0-9]/g, '')}`}
+                      href={`https://wa.me/${unlockedContact.whatsapp.replace(/[^0-9]/g, '')}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 min-h-[36px]"
@@ -604,16 +607,16 @@ export const OperatorRequestDetailPage: React.FC = () => {
                   </div>
                 )}
 
-                {(unlockedContact?.phone || request.call_number) && (
+                {unlockedContact?.phone && (
                   <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-[#E2DED3]">
                     <div>
                       <span className="text-[10px] text-stone-500 block uppercase font-bold">Phone Call</span>
                       <span className="font-bold text-stone-900 font-mono text-sm">
-                        {unlockedContact?.phone || request.call_number}
+                        {unlockedContact.phone}
                       </span>
                     </div>
                     <a
-                      href={`tel:${unlockedContact?.phone || request.call_number}`}
+                      href={`tel:${unlockedContact.phone}`}
                       className="px-3 py-1.5 rounded-lg bg-[#1E5B43] hover:bg-[#154331] text-white font-bold text-xs flex items-center gap-1.5 min-h-[36px]"
                     >
                       <Phone className="w-3.5 h-3.5" />
@@ -622,16 +625,16 @@ export const OperatorRequestDetailPage: React.FC = () => {
                   </div>
                 )}
 
-                {(unlockedContact?.email || request.email_address) && (
+                {unlockedContact?.email && (
                   <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-[#E2DED3]">
                     <div>
                       <span className="text-[10px] text-stone-500 block uppercase font-bold">Direct Email</span>
                       <span className="font-bold text-stone-900 text-xs">
-                        {unlockedContact?.email || request.email_address}
+                        {unlockedContact.email}
                       </span>
                     </div>
                     <a
-                      href={`mailto:${unlockedContact?.email || request.email_address}`}
+                      href={`mailto:${unlockedContact.email}`}
                       className="px-3 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-900 text-white font-bold text-xs flex items-center gap-1.5 min-h-[36px]"
                     >
                       <Mail className="w-3.5 h-3.5" />
@@ -694,7 +697,7 @@ export const OperatorRequestDetailPage: React.FC = () => {
                   <Unlock className="w-4 h-4" />
                   <span>
                     {isProcessingUnlock
-                      ? 'Simulating Payment...'
+                      ? 'Connecting to M-Pesa...'
                       : `Unlock Contact: KSH ${unlockFee.feeKsh.toLocaleString()}`}
                   </span>
                 </button>
@@ -784,7 +787,7 @@ export const OperatorRequestDetailPage: React.FC = () => {
                   className="px-5 py-2.5 text-xs font-bold text-white bg-[#1E5B43] hover:bg-[#154331] disabled:opacity-60 rounded-xl transition-colors inline-flex items-center gap-2 min-h-[44px] cursor-pointer shadow-xs"
                 >
                   <CreditCard className="w-4 h-4" />
-                  {isProcessingPass ? 'Simulating Payment...' : 'Pay KSH 850 with M-Pesa →'}
+                  {isProcessingPass ? 'Connecting to M-Pesa...' : 'Pay KSH 850 with M-Pesa →'}
                 </button>
               )}
               {passModalError && !passModalOpen && (
@@ -913,8 +916,8 @@ export const OperatorRequestDetailPage: React.FC = () => {
             </div>
           )}
 
-          {/* Place New Bid Form (Only open before a bid has been sent on this request) */}
-          {!hasAlreadyBid && hasBiddingPass && profileOk && (
+          {/* Place New Bid Form (Supabase RLS verifies active pass; shows "Pay KSH 850 to bid" if missing) */}
+          {!hasAlreadyBid && profileOk && (
             <form onSubmit={handleSubmitBid} className="space-y-5">
               <div className="text-xs font-bold text-[#1E5B43] uppercase tracking-wider font-heading">
                 Submit Your Bid
