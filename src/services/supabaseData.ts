@@ -278,7 +278,11 @@ export async function rpcUnlockFeeKsh(budgetUsd: number): Promise<SupabaseResult
   if (error) {
     return { data: null, error: formatSupabaseError('rpc unlock_fee_ksh', error) };
   }
-  return { data: Number(data ?? 0), error: null };
+  const parsed = Number(data);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return { data: null, error: null };
+  }
+  return { data: parsed, error: null };
 }
 
 /**

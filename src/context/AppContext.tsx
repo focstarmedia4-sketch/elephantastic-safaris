@@ -1048,17 +1048,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     [adminSettings.biddingPassFeeKsh, bids, passes]
   );
 
-  // Rule 6: Unlock fee from RPC `unlock_fee_ksh({ p_budget_usd })` & unlocks used from RPC `unlocks_used({ p_request })`
+  // Rule 6: Unlock fee from RPC `unlock_fee_ksh({ p_budget_usd })` with automatic budget-tier calculation fallback
   const calculateUnlockFee = useCallback(
     (request: TravelRequest): { feeKsh: number; tierLabel: string } => {
+      const rawBudget = Number(request.budget_usd ?? request.budget ?? 0);
+      const budgetUsd =
+        request.budget_usd !== undefined
+          ? rawBudget
+          : request.currency === 'KSH'
+            ? rawBudget / (adminSettings.exchangeRateKshPerUsd || 130)
+            : rawBudget;
+
+      const tiers =
+        adminSettings.tiers && adminSettings.tiers.length > 0
+          ? adminSettings.tiers
+          : SEED_ADMIN_SETTINGS.tiers;
+      const matchedTier =
+        tiers.find((tier) => budgetUsd >= tier.minUsd && budgetUsd < tier.maxUsd) ||
+        tiers[tiers.length - 1];
+
       const rpcFee = unlockFeeKshByRequestId[request.id];
-      const budgetUsd = request.budget_usd ?? request.budget;
+      const feeKsh =
+        typeof rpcFee === 'number' && Number.isFinite(rpcFee) && rpcFee > 0
+          ? rpcFee
+          : matchedTier.feeKsh;
+
       return {
-        feeKsh: rpcFee !== undefined ? rpcFee : 0,
-        tierLabel: `$${budgetUsd.toLocaleString()} USD`,
+        feeKsh,
+        tierLabel: matchedTier.label,
       };
     },
-    [unlockFeeKshByRequestId]
+    [adminSettings.exchangeRateKshPerUsd, adminSettings.tiers, unlockFeeKshByRequestId]
   );
 
   const getListingUnlockInfo = useCallback(
